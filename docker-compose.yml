@@ -1,0 +1,75 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: catnip-mongodb
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - catnip-net
+
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: catnip-opensearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - catnip-net
+
+  graylog:
+    image: graylog/graylog:6.1
+    container_name: catnip-graylog
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - opensearch
+    environment:
+      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+      - GRAYLOG_HTTP_EXTERNAL_URI=${GRAYLOG_HTTP_EXTERNAL_URI}
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GRAYLOG_MONGODB_URI=mongodb://mongodb:27017/graylog
+      - GRAYLOG_TRANSPORT_EMAIL_ENABLED=true
+      - GRAYLOG_TRANSPORT_EMAIL_HOSTNAME=${SMTP_HOST}
+      - GRAYLOG_TRANSPORT_EMAIL_PORT=${SMTP_PORT}
+      - GRAYLOG_TRANSPORT_EMAIL_USE_AUTH=true
+      - GRAYLOG_TRANSPORT_EMAIL_USE_TLS=true
+      - GRAYLOG_TRANSPORT_EMAIL_USE_SSL=false
+      - GRAYLOG_TRANSPORT_EMAIL_AUTH_USERNAME=${SMTP_USER}
+      - GRAYLOG_TRANSPORT_EMAIL_AUTH_PASSWORD=${SMTP_PASSWORD}
+      - GRAYLOG_TRANSPORT_EMAIL_FROM_EMAIL=${SMTP_USER}
+      - GRAYLOG_TRANSPORT_EMAIL_SUBJECT_PREFIX=[CatnipSIEM]
+      - GRAYLOG_TRANSPORT_EMAIL_WEB_INTERFACE_URL=${GRAYLOG_HTTP_EXTERNAL_URI}
+    ports:
+      - "9000:9000"
+      - "1514:1514/tcp"
+      - "1514:1514/udp"
+      - "12201:12201/udp"
+    volumes:
+      - graylog_data:/usr/share/graylog/data
+    networks:
+      - catnip-net
+
+volumes:
+  mongodb_data:
+  opensearch_data:
+  graylog_data:
+
+networks:
+  catnip-net:
+    driver: bridge
