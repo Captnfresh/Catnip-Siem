@@ -1,0 +1,757 @@
+{
+  "name": "Catnip Games SIEM",
+  "description": "Complete SIEM configuration export for Catnip Games International",
+  "streams": {
+    "total": 5,
+    "streams": [
+      {
+        "id": "000000000000000000000003",
+        "creator_user_id": "admin",
+        "outputs": [],
+        "matching_type": "AND",
+        "description": "Stream containing all system events created by Graylog",
+        "created_at": "2026-04-14T16:41:29.122Z",
+        "disabled": false,
+        "rules": [],
+        "title": "All system events",
+        "content_pack": null,
+        "remove_matches_from_default_stream": true,
+        "index_set_id": "69de6e391511c22199e0a2c3",
+        "categories": null,
+        "is_default": false,
+        "is_editable": false
+      },
+      {
+        "id": "000000000000000000000002",
+        "creator_user_id": "admin",
+        "outputs": [],
+        "matching_type": "AND",
+        "description": "Stream containing all events created by Graylog",
+        "created_at": "2026-04-14T16:41:29.110Z",
+        "disabled": false,
+        "rules": [],
+        "title": "All events",
+        "content_pack": null,
+        "remove_matches_from_default_stream": true,
+        "index_set_id": "69de6e391511c22199e0a2c2",
+        "categories": null,
+        "is_default": false,
+        "is_editable": false
+      },
+      {
+        "id": "69ded9781511c22199e0f89d",
+        "creator_user_id": "admin",
+        "outputs": [],
+        "matching_type": "AND",
+        "description": "Real SSH authentication logs from WSL machine",
+        "created_at": "2026-04-15T00:19:04.827Z",
+        "disabled": false,
+        "rules": [
+          {
+            "field": "event_type",
+            "stream_id": "69ded9781511c22199e0f89d",
+            "description": "",
+            "id": "69ded9cb1511c22199e0f9e8",
+            "type": 1,
+            "inverted": false,
+            "value": "sshd"
+          }
+        ],
+        "title": "ssh-auth",
+        "content_pack": null,
+        "remove_matches_from_default_stream": true,
+        "index_set_id": "69de6e341511c22199e0a238",
+        "categories": null,
+        "is_default": false,
+        "is_editable": true
+      },
+      {
+        "id": "000000000000000000000001",
+        "creator_user_id": "local:admin",
+        "outputs": [],
+        "matching_type": "AND",
+        "description": "Contains messages that are not explicitly routed to other streams",
+        "created_at": "2026-04-14T16:41:24.747Z",
+        "disabled": false,
+        "rules": [],
+        "title": "Default Stream",
+        "content_pack": null,
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "69de6e341511c22199e0a238",
+        "categories": null,
+        "is_default": true,
+        "is_editable": true
+      },
+      {
+        "id": "69deda101511c22199e0faf5",
+        "creator_user_id": "admin",
+        "outputs": [],
+        "matching_type": "OR",
+        "description": null,
+        "created_at": "2026-04-15T00:21:36.612Z",
+        "disabled": false,
+        "rules": [
+          {
+            "field": "event_type",
+            "stream_id": "69deda101511c22199e0faf5",
+            "description": "",
+            "id": "69deda941511c22199e0fd58",
+            "type": 1,
+            "inverted": false,
+            "value": "player_auth"
+          },
+          {
+            "field": "event_type",
+            "stream_id": "69deda101511c22199e0faf5",
+            "description": "",
+            "id": "69dedaa31511c22199e0fda3",
+            "type": 1,
+            "inverted": false,
+            "value": "game_traffic"
+          },
+          {
+            "field": "event_type",
+            "stream_id": "69deda101511c22199e0faf5",
+            "description": "",
+            "id": "69dedae81511c22199e0feb5",
+            "type": 1,
+            "inverted": false,
+            "value": "dev_ssh"
+          }
+        ],
+        "title": "game_server",
+        "content_pack": null,
+        "remove_matches_from_default_stream": true,
+        "index_set_id": "69de6e341511c22199e0a238",
+        "categories": null,
+        "is_default": false,
+        "is_editable": true
+      }
+    ]
+  },
+  "inputs": {
+    "inputs": [
+      {
+        "title": "syslog-udp",
+        "global": true,
+        "name": "Syslog UDP",
+        "content_pack": null,
+        "created_at": "2026-04-14T18:40:37.350Z",
+        "type": "org.graylog2.inputs.syslog.udp.SyslogUDPInput",
+        "creator_user_id": "admin",
+        "attributes": {
+          "expand_structured_data": false,
+          "recv_buffer_size": 262144,
+          "port": 1514,
+          "number_worker_threads": 4,
+          "timezone": "Europe/London",
+          "override_source": null,
+          "charset_name": "UTF-8",
+          "force_rdns": false,
+          "allow_override_date": true,
+          "bind_address": "0.0.0.0",
+          "store_full_message": false
+        },
+        "static_fields": {},
+        "node": null,
+        "id": "69de8a251511c22199e0bb15"
+      },
+      {
+        "title": "gelf-udp",
+        "global": true,
+        "name": "GELF UDP",
+        "content_pack": null,
+        "created_at": "2026-04-14T18:49:44.656Z",
+        "type": "org.graylog2.inputs.gelf.udp.GELFUDPInput",
+        "creator_user_id": "admin",
+        "attributes": {
+          "recv_buffer_size": 262144,
+          "port": 12201,
+          "number_worker_threads": 4,
+          "override_source": null,
+          "charset_name": "UTF-8",
+          "bind_address": "0.0.0.0",
+          "decompress_size_limit": 8388608
+        },
+        "static_fields": {},
+        "node": null,
+        "id": "69de8c481511c22199e0beac"
+      },
+      {
+        "title": "syslog-tcp",
+        "global": true,
+        "name": "Syslog TCP",
+        "content_pack": null,
+        "created_at": "2026-04-14T18:38:16.863Z",
+        "type": "org.graylog2.inputs.syslog.tcp.SyslogTCPInput",
+        "creator_user_id": "admin",
+        "attributes": {
+          "recv_buffer_size": 1048576,
+          "tcp_keepalive": false,
+          "use_null_delimiter": false,
+          "number_worker_threads": 4,
+          "timezone": "Europe/London",
+          "tls_client_auth_cert_file": "",
+          "force_rdns": false,
+          "bind_address": "0.0.0.0",
+          "tls_cert_file": "",
+          "store_full_message": false,
+          "expand_structured_data": false,
+          "port": 1514,
+          "tls_key_file": "",
+          "tls_enable": false,
+          "tls_key_password": "",
+          "max_message_size": 2097152,
+          "tls_client_auth": "disabled",
+          "override_source": null,
+          "charset_name": "UTF-8",
+          "allow_override_date": true
+        },
+        "static_fields": {},
+        "node": null,
+        "id": "69de89981511c22199e0b863"
+      }
+    ],
+    "total": 3
+  },
+  "event_definitions": {
+    "total": 5,
+    "page": 1,
+    "per_page": 50,
+    "count": 5,
+    "event_definitions": [
+      {
+        "_scope": "DEFAULT",
+        "id": "69e008361511c22199e25300",
+        "title": "Credential Stuffing Attack",
+        "description": "Triggers when credential stuffing attempts exceed 20 within 5 minutes from a single IP \u2014 indicates automated account takeover attempt",
+        "remediation_steps": "1. Block source IP at firewall immediately\n2. Force password reset for all targeted player accounts\n3. Enable CAPTCHA on login endpoints\n4. Check for successful logins following the attack from same IP\n5. Review affected usernames for account compromise\n6. Add source IP to threat intelligence blocklist\n7. Consider implementing account lockout after 5 failed attempts",
+        "updated_at": "2026-04-15T21:50:46.550Z",
+        "matched_at": "2026-04-15T23:05:46.732Z",
+        "priority": 3,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "event_type:player_auth AND action:credential_stuffing",
+          "query_parameters": [],
+          "filters": [],
+          "streams": [],
+          "stream_categories": [],
+          "group_by": [
+            "source_ip"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 20.0
+              }
+            }
+          },
+          "search_within_ms": 300000,
+          "execute_every_ms": 300000,
+          "use_cron_scheduling": false,
+          "cron_expression": null,
+          "cron_timezone": null,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 50
+        },
+        "notifications": [
+          {
+            "notification_id": "69e0035f1511c22199e24492",
+            "notification_parameters": null
+          }
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "scheduler": null,
+        "state": "ENABLED"
+      },
+      {
+        "_scope": "DEFAULT",
+        "id": "69e006d51511c22199e24f9d",
+        "title": "DDoS Attack Detected",
+        "description": "",
+        "remediation_steps": "1. Activate DDoS mitigation rules at network edge immediately\n2. Block source IP at firewall\n3. Enable rate limiting on affected game server\n4. Notify game server team to expect degraded performance\n5. Monitor traffic_mbps field to track attack intensity\n6. Consider enabling CDN or DDoS protection service (e.g. Cloudflare)\n7. Document attack timeline for post-incident review",
+        "updated_at": "2026-04-15T21:44:53.696Z",
+        "matched_at": "2026-04-15T23:04:35.983Z",
+        "priority": 3,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "event_type:game_traffic AND action:ddos_detected",
+          "query_parameters": [],
+          "filters": [],
+          "streams": [],
+          "stream_categories": [],
+          "group_by": [],
+          "series": [],
+          "conditions": {
+            "expression": null
+          },
+          "search_within_ms": 300000,
+          "execute_every_ms": 300000,
+          "use_cron_scheduling": false,
+          "cron_expression": null,
+          "cron_timezone": null,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 50
+        },
+        "notifications": [
+          {
+            "notification_id": "69e0035f1511c22199e24492",
+            "notification_parameters": null
+          }
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "scheduler": null,
+        "state": "ENABLED"
+      },
+      {
+        "_scope": "DEFAULT",
+        "id": "69e003ae1511c22199e245a2",
+        "title": "SSH Brute Force Detection",
+        "description": "Triggers when failed SSH login attempts exceed 10 within 5 minutes \u2014 indicates a brute force attack in progress",
+        "remediation_steps": "1. Block source IP at firewall immediately\n2. Review all affected usernames in the alert\n3. Check if any failed attempts were followed by a successful login from the same IP\n4. Reset passwords for any successfully compromised accounts\n5. Review /var/log/auth.log for full attack timeline\n6. Add source IP to threat intelligence blocklist\n7. Consider implementing fail2ban to automate IP blocking",
+        "updated_at": "2026-04-15T21:31:25.983Z",
+        "matched_at": "2026-04-15T22:36:26.059Z",
+        "priority": 3,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "event_type:sshd AND action:failed",
+          "query_parameters": [],
+          "filters": [],
+          "streams": [],
+          "stream_categories": [],
+          "group_by": [
+            "source_ip"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 10.0
+              }
+            }
+          },
+          "search_within_ms": 300000,
+          "execute_every_ms": 300000,
+          "use_cron_scheduling": false,
+          "cron_expression": null,
+          "cron_timezone": null,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 50
+        },
+        "notifications": [
+          {
+            "notification_id": "69e0035f1511c22199e24492",
+            "notification_parameters": null
+          }
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "scheduler": null,
+        "state": "ENABLED"
+      },
+      {
+        "_scope": "DEFAULT",
+        "id": "69e009fd1511c22199e25b82",
+        "title": "Suspicious Dev SSH Login",
+        "description": "Triggers when a suspicious SSH login is detected on any dev server \u2014 indicates potential insider threat or compromised developer credentials",
+        "remediation_steps": "1. Immediately revoke SSH access for the affected user\n2. Check if source IP matches known developer locations\n3. Review all commands executed during the session\n4. Force password reset for the affected developer account\n5. Check for lateral movement to other dev servers from same IP\n6. Review git commit history for any malicious code changes\n7. Escalate to security team if compromise is confirmed",
+        "updated_at": "2026-04-15T21:58:21.656Z",
+        "matched_at": "2026-04-15T23:03:19.132Z",
+        "priority": 3,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "event_type:dev_ssh AND action:suspicious_login",
+          "query_parameters": [],
+          "filters": [],
+          "streams": [],
+          "stream_categories": [],
+          "group_by": [],
+          "series": [],
+          "conditions": {
+            "expression": null
+          },
+          "search_within_ms": 300000,
+          "execute_every_ms": 300000,
+          "use_cron_scheduling": false,
+          "cron_expression": null,
+          "cron_timezone": null,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 50
+        },
+        "notifications": [
+          {
+            "notification_id": "69e0035f1511c22199e24492",
+            "notification_parameters": null
+          }
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "scheduler": null,
+        "state": "ENABLED"
+      },
+      {
+        "_scope": "SYSTEM_NOTIFICATION_EVENT",
+        "id": "69de6e391511c22199e0a2c4",
+        "title": "System notification events",
+        "description": "Reserved event definition for system notification events",
+        "updated_at": "2026-04-14T16:41:29.132Z",
+        "matched_at": "2026-04-15T22:48:22.485Z",
+        "priority": 1,
+        "alert": false,
+        "config": {
+          "type": "system-notifications-v1"
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 0,
+          "backlog_size": 0
+        },
+        "notifications": [],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000003"
+            ]
+          }
+        ],
+        "scheduler": null,
+        "state": "ENABLED"
+      }
+    ],
+    "query": "",
+    "context": {
+      "scheduler": {
+        "69e008361511c22199e25300": {
+          "status": "runnable",
+          "next_time": "2026-04-15T23:10:46.732Z",
+          "triggered_at": "2026-04-15T23:05:52.090Z",
+          "queued_notifications": 0,
+          "data": {
+            "type": "event-processor-execution-v1",
+            "timerange_from": "2026-04-15T23:05:46.732Z",
+            "timerange_to": "2026-04-15T23:10:46.732Z"
+          },
+          "is_scheduled": true
+        },
+        "69e006d51511c22199e24f9d": {
+          "status": "runnable",
+          "next_time": "2026-04-15T23:09:53.825Z",
+          "triggered_at": "2026-04-15T23:04:59.574Z",
+          "queued_notifications": 0,
+          "data": {
+            "type": "event-processor-execution-v1",
+            "timerange_from": "2026-04-15T23:04:53.825Z",
+            "timerange_to": "2026-04-15T23:09:53.825Z"
+          },
+          "is_scheduled": true
+        },
+        "69e003ae1511c22199e245a2": {
+          "status": "runnable",
+          "next_time": "2026-04-15T23:06:26.059Z",
+          "triggered_at": "2026-04-15T23:01:26.827Z",
+          "queued_notifications": 0,
+          "data": {
+            "type": "event-processor-execution-v1",
+            "timerange_from": "2026-04-15T23:01:26.059Z",
+            "timerange_to": "2026-04-15T23:06:26.059Z"
+          },
+          "is_scheduled": true
+        },
+        "69e009fd1511c22199e25b82": {
+          "status": "runnable",
+          "next_time": "2026-04-15T23:08:21.662Z",
+          "triggered_at": "2026-04-15T23:03:21.680Z",
+          "queued_notifications": 0,
+          "data": {
+            "type": "event-processor-execution-v1",
+            "timerange_from": "2026-04-15T23:03:21.662Z",
+            "timerange_to": "2026-04-15T23:08:21.662Z"
+          },
+          "is_scheduled": true
+        },
+        "69de6e391511c22199e0a2c4": {
+          "status": null,
+          "next_time": null,
+          "triggered_at": null,
+          "queued_notifications": 0,
+          "data": null,
+          "is_scheduled": false
+        }
+      }
+    }
+  },
+  "dashboards": {
+    "query": null,
+    "pagination": {
+      "total": 6,
+      "count": 6,
+      "page": 1,
+      "per_page": 50
+    },
+    "total": 6,
+    "sort": "title",
+    "order": "asc",
+    "elements": [
+      {
+        "id": "69dfa3368a65ad2041369ef7",
+        "type": "DASHBOARD",
+        "title": "Dev Environment Security",
+        "summary": "Developer SSH activity monitoring and suspicious access detection",
+        "description": "Monitors SSH activity across Catnip dev servers. Shows normal vs suspicious logins, top targeted dev accounts, and suspicious access patterns.",
+        "search_id": "69dfa9b38a65ad2041369f08",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2026-04-15T14:39:46.283Z",
+        "last_updated_at": "2026-04-15T15:08:36.214Z",
+        "favorite": false
+      },
+      {
+        "id": "69df4b5407a7433e1a33ee9b",
+        "type": "DASHBOARD",
+        "title": "Game Server Health",
+        "summary": "Game server traffic monitoring, DDoS detection, and server health analysis",
+        "description": "Monitors traffic levels across Catnip game servers. Shows normal vs attack traffic, DDoS events, affected servers, and traffic volume over time.",
+        "search_id": "69df9e505413c6e6fbcff899",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2026-04-15T08:22:19.481Z",
+        "last_updated_at": "2026-04-15T14:19:25.688Z",
+        "favorite": false
+      },
+      {
+        "id": "69df9ef33338a9a6b1dadfc3",
+        "type": "DASHBOARD",
+        "title": "Player Auth Monitoring",
+        "summary": "Player login success and failure tracking, credential stuffing detection",
+        "description": "Monitors player authentication events across game servers. Shows login success rates, failed attempts, credential stuffing attacks, and top targeted players",
+        "search_id": "69dfa2b43338a9a6b1dadfd4",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2026-04-15T14:21:21.081Z",
+        "last_updated_at": "2026-04-15T14:37:50.704Z",
+        "favorite": false
+      },
+      {
+        "id": "69df3b41d23c565d4829f888",
+        "type": "DASHBOARD",
+        "title": "Security Overview",
+        "summary": "High level security summary across all Catnip Games infrastructure",
+        "description": "Shows total events, event timeline, event type breakdown, and critical event count over 24 hours",
+        "search_id": "69dfaa8cdb949240c40cf840",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2026-04-15T06:40:45.495Z",
+        "last_updated_at": "2026-04-15T15:11:17.667Z",
+        "favorite": false
+      },
+      {
+        "id": "69de6e3c1511c22199e0a328",
+        "type": "DASHBOARD",
+        "title": "Sources",
+        "summary": "This is a list of all sources that sent in messages to Graylog.",
+        "description": "This is a list of all sources that sent in messages to Graylog. You can narrow the timerange by zooming in on the message histogram, or you can increase the time range by specifying a broader one in the controls at the top. You can also specify filters to limit the results you are seeing. You can also add additional widgets to this dashboard, or adapt the appearance of existing widgets to suit your needs.",
+        "search_id": "69de6e3c1511c22199e0a327",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2023-06-01T08:43:23.743Z",
+        "last_updated_at": "2026-04-14T16:41:32.717Z",
+        "favorite": false
+      },
+      {
+        "id": "69df4bfc07a7433e1a33ee9c",
+        "type": "DASHBOARD",
+        "title": "SSH Monitoring",
+        "summary": "SSH authentication activity, brute force detection, and attacker analysis",
+        "description": "Real SSH authentication logs from WSL machine. Shows failed logins over time, top attacking IPs, most targeted usernames, and success vs failure ratio.",
+        "search_id": "69df951455be79843bac90f8",
+        "properties": [],
+        "requires": {},
+        "owner": "admin",
+        "created_at": "2026-04-15T08:22:19.481Z",
+        "last_updated_at": "2026-04-15T13:40:53.727Z",
+        "favorite": false
+      }
+    ],
+    "attributes": [
+      {
+        "id": "_id",
+        "title": "id",
+        "type": "OBJECT_ID",
+        "sortable": true,
+        "searchable": true,
+        "hidden": true
+      },
+      {
+        "id": "title",
+        "title": "Title",
+        "type": "STRING",
+        "sortable": true,
+        "searchable": true
+      },
+      {
+        "id": "created_at",
+        "title": "Created",
+        "type": "DATE",
+        "sortable": true,
+        "filterable": true
+      },
+      {
+        "id": "last_updated_at",
+        "title": "Last Updated",
+        "type": "DATE",
+        "sortable": true,
+        "filterable": true
+      },
+      {
+        "id": "description",
+        "title": "Description",
+        "type": "STRING",
+        "sortable": true,
+        "searchable": true
+      },
+      {
+        "id": "summary",
+        "title": "Summary",
+        "type": "STRING",
+        "sortable": true,
+        "searchable": true
+      },
+      {
+        "id": "owner",
+        "title": "Owner",
+        "type": "STRING",
+        "sortable": true
+      },
+      {
+        "id": "favorite",
+        "title": "Favorite",
+        "type": "STRING",
+        "sortable": false
+      }
+    ],
+    "defaults": {
+      "sort": {
+        "id": "title",
+        "direction": "ASC"
+      }
+    }
+  },
+  "notifications": {
+    "total": 1,
+    "page": 1,
+    "per_page": 50,
+    "count": 1,
+    "notifications": [
+      {
+        "id": "69e0035f1511c22199e24492",
+        "title": "Catnip SIEM Email Notification",
+        "description": "Sends email notification to Adebowale when any Catnip SIEM alert is triggered",
+        "config": {
+          "type": "email-notification-v1",
+          "sender": "adebowale.adesanya001@gmail.com",
+          "reply_to": "",
+          "subject": "Graylog event notification: ${event_definition_title}",
+          "body_template": "--- [Event Definition] ---------------------------\nTitle:       ${event_definition_title}\nDescription: ${event_definition_description}\nType:        ${event_definition_type}\n--- [Event] --------------------------------------\nAlert Replay:         ${http_external_uri}alerts/${event.id}/replay-search\nTimestamp:            ${event.timestamp}\nMessage:              ${event.message}\nSource:               ${event.source}\nKey:                  ${event.key}\nPriority:             ${event.priority}\nAlert:                ${event.alert}\nTimestamp Processing: ${event.timestamp}\nTimerange Start:      ${event.timerange_start}\nTimerange End:        ${event.timerange_end}\nFields:\n${foreach event.fields field}  ${field.key}: ${field.value}\n${end}\n${if backlog}\n--- [Backlog] ------------------------------------\nLast messages accounting for this alert:\n${foreach backlog message}\n${message}\n${end}\n${end}\n",
+          "html_body_template": "<table width=\"100%\" border=\"0\" cellpadding=\"10\" cellspacing=\"0\" style=\"background-color:#f9f9f9;border:none;line-height:1.2\"><tbody>\n<tr style=\"line-height:1.5\"><th colspan=\"2\" style=\"background-color:#e6e6e6\">Event Definition</th></tr>\n<tr><td width=\"200px\">Title</td><td>${event_definition_title}</td></tr>\n<tr><td>Description</td><td>${event_definition_description}</td></tr>\n<tr><td>Type</td><td>${event_definition_type}</td></tr>\n</tbody></table>\n<br /><table width=\"100%\" border=\"0\" cellpadding=\"10\" cellspacing=\"0\" style=\"background-color:#f9f9f9;border:none;line-height:1.2\"><tbody>\n<tr><th colspan=\"2\" style=\"background-color:#e6e6e6;line-height:1.5\">Event</th></tr>\n<tr><td>Alert Replay</td><td>${http_external_uri}alerts/${event.id}/replay-search</td></tr>\n<tr><td width=\"200px\">Timestamp</td><td>${event.timestamp}</td></tr>\n<tr><td>Message</td><td>${event.message}</td></tr>\n<tr><td>Source</td><td>${event.source}</td></tr>\n<tr><td>Key</td><td>${event.key}</td></tr>\n<tr><td>Priority</td><td>${event.priority}</td></tr>\n<tr><td>Alert</td><td>${event.alert}</td></tr>\n<tr><td>Timestamp Processing</td><td>${event.timestamp}</td></tr>\n<tr><td>Timerange Start</td><td>${event.timerange_start}</td></tr>\n<tr><td>Timerange End</td><td>${event.timerange_end}</td></tr>\n<tr><td>Source Streams</td><td>${event.source_streams}</td></tr>\n<tr><td>Fields</td><td><ul style=\"list-style-type:square;\">${foreach event.fields field}<li>${field.key}:${field.value}</li>${end}<ul></td></tr>\n</tbody></table>\n${if backlog}\n<br /><table width=\"100%\" border=\"0\" cellpadding=\"10\" cellspacing=\"0\" style=\"background-color:#f9f9f9;border:none;line-height:1.2\"><tbody>\n<tr><th style=\"background-color:#e6e6e6;line-height:1.5\">Backlog (Last messages accounting for this alert)</th></tr>\n${foreach backlog message}\n<tr><td>${message}</td></tr>\n${end}\n</tbody></table>\n${end}\n",
+          "email_recipients": [
+            "adebowale.adesanya001@gmail.com"
+          ],
+          "user_recipients": [],
+          "time_zone": "Europe/London",
+          "lookup_recipient_emails": false,
+          "recipients_lut_name": null,
+          "recipients_lut_key": null,
+          "lookup_sender_email": false,
+          "sender_lut_name": null,
+          "sender_lut_key": null,
+          "lookup_reply_to_email": false,
+          "reply_to_lut_name": null,
+          "reply_to_lut_key": null
+        }
+      }
+    ],
+    "query": ""
+  }
+}
