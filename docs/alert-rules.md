@@ -1,6 +1,6 @@
 # Alert Rules — Event Definitions and Notifications
 
-**Contributor:** Faith Okonoboh 
+**Contributor:** Faith Okonoboh  
 **Role:** Alerts  
 **Project:** Catnip Games International SIEM  
 
