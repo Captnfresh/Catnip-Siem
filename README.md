@@ -41,55 +41,10 @@ This project builds the solution — a centralised SIEM that collects, parses, v
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    LOG SOURCES                      │
-│   SSH/Auth logs    Game servers      Player auth    │
-│   (rsyslog/TCP)    (Python GELF)     (Python GELF)  │
-└──────────────┬──────────────┬────────────────────── ┘
-               │              │
-               ▼              ▼
-┌─────────────────────────────────────────────────────┐
-│                  GRAYLOG INPUTS                     │
-│   Syslog TCP:1514   Syslog UDP:1514   GELF UDP:12201│
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│            PARSING & NORMALISATION                  │
-│   Extractors → event_type, action, username,        │
-│                source_ip                            │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│                    STREAMS                          │
-│   ssh-auth stream        game-server stream         │
-└──────────┬───────────────────────┬──────────────────┘
-           │                       │
-           ▼                       ▼
-┌─────────────────────────────────────────────────────┐
-│           OPENSEARCH (Storage + Search)             │
-└──────────┬───────────────────────┬──────────────────┘
-           │                       │
-           ▼                       ▼
-┌──────────────────┐   ┌───────────────────────────── ┐
-│   5 DASHBOARDS   │   │       4 ALERT RULES          │
-│   20 widgets     │   │   Email notifications        │
-└──────────────────┘   └──────────────────────────────┘
-                                   │
-                                   ▼
-                        ┌──────────────────┐
-                        │  PYTHON REPORT   │
-                        │  Weekly summary  │
-                        └──────────────────┘
-```
 
+## Architecture diagram
 
-
-
-
-
+![Catnip Games SIEM Architecture](assets/catnip-siem-architecture.svg)
 
 ---
 
