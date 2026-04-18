@@ -132,7 +132,7 @@ Before you begin, make sure you have the following installed:
 
 ## Quick Start — Fully Automated Setup
 
-The bootstrap scripts handle everything automatically — Docker startup, content pack installation (restoring all streams, dashboards, alert rules, and extractors), Python dependencies, and the log generator. One command and you have a fully running SIEM.
+The bootstrap scripts handle everything automatically — Docker startup, content pack installation (restoring all streams, dashboards, alert rules, and extractors), Python dependencies, the log generator, and an end-to-end smoke test that confirms logs are flowing before the script exits. One command and you have a fully running, self-verified SIEM.
 
 ### Step 1 — Clone the repository
 
@@ -152,6 +152,7 @@ Open `.env` and fill in the values shared privately with the team via WhatsApp:
 ```
 GRAYLOG_PASSWORD_SECRET=
 GRAYLOG_ROOT_PASSWORD_SHA2=
+GRAYLOG_ADMIN_PASSWORD=
 GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
 OPENSEARCH_ADMIN_PASSWORD=
 SMTP_HOST=smtp.gmail.com
@@ -159,6 +160,8 @@ SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
 ```
+
+> **Why there are two Graylog password variables:** `GRAYLOG_ROOT_PASSWORD_SHA2` is the SHA-256 hash that Graylog uses to create the admin account at startup. `GRAYLOG_ADMIN_PASSWORD` is the matching plaintext value that the bootstrap script uses to authenticate against the Graylog API (for installing the content pack, verifying inputs, and running the smoke test). Both must refer to the same password — the plaintext in `GRAYLOG_ADMIN_PASSWORD` must produce the hash stored in `GRAYLOG_ROOT_PASSWORD_SHA2`.
 
 ### Step 3 — Run the bootstrap script
 
@@ -181,13 +184,17 @@ bootstrap.bat
 The bootstrap script automatically:
 - Detects your operating system
 - Sets the required OpenSearch kernel setting on Linux/WSL (skipped on Mac/Windows)
+- Auto-fixes Windows CRLF line endings in `.env` if present (silent, no user action required)
 - Starts all three Docker containers
-- Waits for Graylog to become healthy
-- Uploads and installs the content pack — restoring all inputs, extractors, streams, dashboards, alert rules, and email notifications
+- Waits for Graylog to become ready via the `/api/system/lbstatus` endpoint
+- Verifies API credentials against an authenticated endpoint before proceeding
+- Uploads and installs the content pack idempotently — skips upload if already present, looks up the pack ID by name after upload to avoid response-parsing bugs
+- Verifies at least one input is configured before continuing
 - Installs Python dependencies
 - Starts the log generator in the background
+- **Runs a built-in smoke test** — captures a baseline message count, then polls the Graylog API for 30 seconds to confirm new messages are being ingested
 
-**Expected output:**
+**Expected output (truncated):**
 
 ```
 =============================================================
@@ -198,38 +205,38 @@ The bootstrap script automatically:
 [OK] WSL (Windows Subsystem for Linux) detected
 
 [2/7] Checking dependencies...
-[OK] Docker found: Docker version 27.x
+[OK] Docker found: Docker version 29.x
 [OK] Docker Compose found
 [OK] Python3 found: Python 3.12.x
 
 [3/7] Configuring system settings...
-[OK] vm.max_map_count set to 262144
+[OK] vm.max_map_count already configured
 
 [4/7] Checking environment configuration...
 [OK] .env file found
+[OK] Graylog admin credentials loaded from .env
 
 [5/7] Starting Docker containers...
-[OK] Graylog is healthy
+[OK] Graylog is ready
+[OK] Graylog authentication verified
 
 [6/7] Installing Graylog content pack...
 [OK] Content pack uploaded
-[OK] Content pack installed — streams, alerts, dashboards, notifications restored
+[OK] Content pack installed — streams, alerts, dashboards, inputs, notifications restored
+[OK] 3 Graylog input(s) configured
 
-[7/7] Installing Python dependencies and starting log generator...
-[OK] Python requests library installed
-[OK] Log generator started (PID: XXXXX)
+[7/7] Starting log generator and verifying end-to-end flow...
+[OK] Python dependencies ready
+[..] Baseline message count: 0
+[OK] Log generator running (PID: XXXXX)
+[OK] Logs flowing: 3 new messages ingested (total: 3)
 
 =============================================================
-   Bootstrap complete!
+   Bootstrap complete — SIEM is fully operational!
 =============================================================
-
-  Graylog UI:      http://localhost:9000
-  Username:        admin
-  Password:        (from your .env file)
-
-  Log generator:   running in background
-  Generator logs:  logs/generator.log
 ```
+
+The final green `Logs flowing` line is the script verifying its own success — if this line appears, the SIEM is end-to-end operational and no manual intervention is required.
 
 ### Step 4 — Verify everything is running
 
@@ -250,7 +257,7 @@ catnip-opensearch   opensearchproject/opensearch:2.15.0     Up
 
 Open your browser and go to `http://localhost:9000`
 
-Log in with username `admin` and the password from your `.env` file.
+Log in with username `admin` and the password from `GRAYLOG_ADMIN_PASSWORD` in your `.env` file.
 
 ### Step 6 — Configure rsyslog for real SSH logs (Linux/WSL only)
 
@@ -511,6 +518,80 @@ GitHub removed password authentication for Git operations in 2021. PATs are requ
 
 ---
 
+### Problem 7 — Bootstrap returned HTTP 401 when installing the content pack
+
+**What happened:**
+The bootstrap script reached the Graylog API successfully and confirmed Graylog was healthy, but every call to install the content pack came back with `HTTP 401 Unauthorized`. The same admin credentials worked fine when entered manually via the web UI.
+
+**What caused it:**
+An early version of the bootstrap read the password from the wrong variable in `.env`. The script was loading `GRAYLOG_ROOT_PASSWORD_SHA2` — the SHA-256 hash — and passing that hash as the plaintext password in `curl -u admin:<hash>`. HTTP Basic Auth expects the plaintext, and Graylog hashes it internally before comparison. Sending an already-hashed value meant Graylog hashed the hash and compared it to the stored hash, which never matched. The script effectively locked itself out despite having valid credentials available.
+
+**How we fixed it:**
+We introduced a dedicated `GRAYLOG_ADMIN_PASSWORD` variable in `.env` for the plaintext value, alongside the existing `GRAYLOG_ROOT_PASSWORD_SHA2` for the hash that Graylog itself consumes at startup. The bootstrap now reads the plaintext variable for its API calls, and a new validation step calls an authenticated endpoint (`/api/users`) immediately after Graylog becomes ready — if that returns anything other than 200, the script stops with a clear error pointing at the credential mismatch.
+
+**What it taught us:**
+SHA-256 is one-way. If a process needs to authenticate programmatically, it needs the plaintext stored somewhere accessible, and that plaintext must match the pre-hashed value the server was configured with. "I can see the hash in `.env`" is not the same as "the script has the password" — they serve different consumers. The fix also reinforced the value of testing credentials against an authenticated endpoint explicitly, rather than relying on unauthenticated health checks like `/api/system/lbstatus` which return 200 regardless of credentials.
+
+---
+
+### Problem 8 — Windows line endings in `.env` caused silent authentication failure
+
+**What happened:**
+After adding `GRAYLOG_ADMIN_PASSWORD=CatnipAdmin@2026` to `.env`, the bootstrap still failed with HTTP 401 on every API call. The same password worked perfectly when copy-pasted into a manual `curl` command. Looking at the file, the password line looked completely normal.
+
+**What caused it:**
+The `.env` file was edited from a Windows-mounted WSL directory (`/mnt/c/Users/...`). Text files created or edited on Windows filesystems often save with CRLF line endings (`\r\n`) rather than Unix LF (`\n`). When the bootstrap's `grep | cut` extraction pulled the password value, it silently included the trailing carriage return. The script was literally sending `curl -u admin:CatnipAdmin@2026\r` to Graylog — a password that didn't match anything. Because `\r` is invisible when printing with `echo`, the password looked correct everywhere we checked.
+
+**How we diagnosed it:**
+```bash
+grep GRAYLOG_ADMIN_PASSWORD .env | cat -A
+# Output: GRAYLOG_ADMIN_PASSWORD=CatnipAdmin@2026^M$
+```
+The `^M` before the `$` end-of-line marker is the carriage return byte — the smoking gun.
+
+**How we fixed it:**
+First, a one-shot cleanup of the affected file:
+```bash
+sed -i 's/\r$//' .env
+```
+Then we hardened the bootstrap itself. The script now auto-detects CRLF in `.env` on every run and strips it silently before reading any values. The password extraction helper also explicitly pipes through `tr -d '\r'` as a belt-and-braces guard. This means the bootstrap works regardless of what line endings the `.env` was saved with — a teammate editing on Windows won't trip the same bug.
+
+**What it taught us:**
+Cross-platform config parsing is a real hazard that doesn't show up until someone runs the code from a different environment than the author did. Unicode-whitespace bugs are especially nasty because the culprit is invisible in normal output. `cat -A` (or `od -c`) exposes these hidden characters — it's the first thing to reach for when two seemingly-identical strings refuse to match.
+
+---
+
+### Problem 9 — Docker volumes surviving `docker compose down -v` on WSL
+
+**What happened:**
+After a successful bootstrap run, we ran `docker compose down -v` to reset and retry. The command reported all three volumes as `Removed`. We then ran `docker compose up -d` again and re-ran the bootstrap, expecting a clean Graylog. Instead, we saw duplicate streams (four copies of `game_server`, four copies of `ssh-auth`) and nine inputs where there should have been three. Each fresh run appeared to add one more copy of every entity. Direct MongoDB queries confirmed three full installation records existed even on a "fresh" Graylog that had never been touched.
+
+**What caused it:**
+The machine had two separate Docker engines running side by side — Docker Desktop on the Windows host, and a docker daemon inside the WSL distribution. Containers and volumes created through one engine are invisible to the other. `docker compose down -v` run from inside WSL was cleaning up WSL's Docker, while Docker Desktop still held the old containers and their volumes. When `docker compose up -d` ran next, the containers it created bound back to the pre-existing volumes, rehydrating the old Graylog state — accumulated content pack installations and all.
+
+**How we diagnosed it:**
+```bash
+docker ps -a | grep catnip
+# Listed containers with 3-day-old creation timestamps
+docker volume ls | grep catnip
+# Volumes still present after supposedly successful "down -v"
+```
+Running the same commands from Windows CMD against Docker Desktop showed a different set of containers and volumes entirely, confirming the split-brain.
+
+**How we fixed it:**
+One-time cleanup — delete the orphaned containers and volumes from both engines:
+```bash
+# Inside WSL
+docker rm -f catnip-graylog catnip-mongodb catnip-opensearch
+docker volume rm catnip-siem_graylog_data catnip-siem_mongodb_data catnip-siem_opensearch_data
+```
+Going forward, we standardised on running everything from WSL (where the bootstrap lives) and stopped invoking Docker commands from Windows CMD. When `docker compose down -v` completes, we now verify with `docker volume ls | grep catnip` — if anything remains, we force-remove it explicitly before the next `up`.
+
+**What it taught us:**
+On Windows, having WSL installed plus Docker Desktop can create two independent Docker contexts depending on how Docker Desktop is configured. A command that appears to succeed in one context can leave artefacts in the other, producing state-drift that looks like a bug in whatever you're running. When a clean-looking environment keeps behaving like a stale one, check whether you're actually talking to the daemon you think you are — `docker context ls` shows which one is active. We also added a self-verifying smoke test to the bootstrap specifically so this class of environmental ghost becomes visible in the script output rather than in confused debugging hours later.
+
+---
+
 ## Restarting After a Break
 
 When you close your laptop or restart WSL, all containers stop and the log generator process dies. Run these commands to restore everything:
@@ -538,12 +619,12 @@ nohup python3 scripts/log_generator.py > logs/generator.log 2>&1 &
 
 | Name | Role | Contribution |
 |---|---|---|
-| Adebowale (Team Lead) | Architecture & Python | Docker infrastructure, log generator, report script, bootstrap scripts, project coordination |
+| Adebowale (Team Lead) | Architecture & Python | Docker infrastructure, log generator, report script, bootstrap scripts, project coordination, led the end-to-end debugging and validation session |
 | Stephen | UI Platform | Graylog platform deployment and maintenance |
 | Lekan | Log Ingestion | Inputs, extractors, rsyslog configuration, streams |
 | Faith | Alerts | Event definitions, notifications, remediation procedures |
 | Akhamas | Dashboards | 5 dashboards, 20 widgets, visualisation design |
-| Chamberlain | Documentation | README, process documentation, GitHub repo structure |
+| Chamberlain | Documentation & Debugging | README, process documentation, GitHub repo structure, co-led the end-to-end debugging and validation session with Adebowale and reproducing the bootstrap on a clean environment, diagnosing the authentication, line-ending, and Docker-state issues documented in Problems 7–9, and verifying the final fixes |
 
 ---
 
@@ -564,6 +645,9 @@ No explicit retention policy has been configured. In production, a 30-day hot st
 **Alert fatigue:**
 The current alerting is threshold-based only — it fires whenever a count exceeds a fixed number regardless of whether that count is unusual for that specific IP or user. A behavioural baseline engine that profiles normal activity per entity and scores alerts against that baseline would significantly reduce false positives. This is documented as a future enhancement.
 
+**Secret distribution:**
+The current workflow shares `.env` privately between team members via WhatsApp. This is appropriate for an academic prototype but would not scale to a production environment. Hardening paths include using a secrets manager (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), CI/CD secret injection, or encrypting `.env` in the repository with `sops` or `git-crypt`. All three are documented as future work.
+
 ---
 
 ## Module Context
@@ -574,4 +658,3 @@ Built for the **Cyber Security Automation** module at the University of Roehampt
 - **Work Role:** DCWF 511 — Cyber Defense Analyst
 - **Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats
 - **Assessment:** In-lab team demonstration with individual Q&A
-```
