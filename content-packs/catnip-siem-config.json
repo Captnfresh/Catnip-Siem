@@ -1221,7 +1221,7 @@
               },
               "query": {
                 "type": "elasticsearch",
-                "query_string": "event_type:sshd AND action:Failed"
+                "query_string": "event_type:sshd AND action:failed"
               },
               "streams": [],
               "stream_categories": [],
@@ -1332,7 +1332,6 @@
           "static_message_list_id": null,
           "titles": {
             "widget": {
-              "be7ca14a-def8-4b3c-8a47-35c4aef16744": "Failed SSH Logins Over Time",
               "cd97a5d5-d8b5-4aca-a295-aa18f301d0a0": "DDoS Attacks Over Time",
               "ac7e5b71-fe7c-424a-aeaa-1cc0d36dd847": "Top Targeted Game Servers",
               "c8f96d4e-4536-4eff-b7cc-d29adf11fa5a": "Traffic Volume Over Time",
@@ -2004,7 +2003,7 @@
               },
               "query": {
                 "type": "elasticsearch",
-                "query_string": " event_type:dev_ssh AND action:suspicious_login"
+                "query_string": "event_type:dev_ssh AND action:suspicious_login"
               },
               "streams": [],
               "stream_categories": [],
