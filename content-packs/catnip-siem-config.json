@@ -1941,7 +1941,7 @@
               },
               "query": {
                 "type": "elasticsearch",
-                "query_string": ""
+                "query_string": "event_type:dev_ssh"
               },
               "streams": [],
               "stream_categories": [],
