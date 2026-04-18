@@ -6,9 +6,26 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docker.com)
 [![Python](https://img.shields.io/badge/Python-3.x-yellow)](https://python.org)
 
-A centralised Security Information and Event Management (SIEM) platform built for Catnip Games International — a rapidly growing gaming company requiring comprehensive security monitoring across 300 game servers, player authentication systems, and developer environments.
+---
 
-Built as part of the Cyber Security Automation module at the University of Roehampton. DCWF 511 — Cyber Defense Analyst work role.
+## Assessment Context
+
+This project was built for the **Cyber Security Automation** module at the University of Roehampton.
+
+**Work Role:** DCWF 511 — Cyber Defense Analyst
+
+**Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats.
+
+**Assessment:** In-lab team demonstration with individual Q&A
+
+**The brief asked us to:**
+- Select a real-world security scenario requiring automated monitoring
+- Design and deploy a SIEM solution addressing that scenario
+- Demonstrate log ingestion, parsing, stream routing, dashboards, and alerting
+- Show evidence of automation beyond manual configuration
+- Reflect critically on design decisions, limitations, and mitigations
+
+**Our Solution:** We built a fully operational Graylog-based SIEM for a fictional gaming company called Catnip Games International, simulating the security infrastructure of a company with 300 game servers, a player authentication system, and a developer environment, all of which were compromised or unmonitored during the company's beta phase.
 
 ---
 
@@ -28,23 +45,22 @@ This project builds the solution — a centralised SIEM that collects, parses, v
 
 ## What This System Does
 
-- Collects real SSH authentication logs from Linux servers
-- Simulates game server, player auth, and DDoS log events
-- Parses raw log messages into structured searchable fields
-- Routes events into logical streams for targeted analysis
-- Displays real-time security data across 5 dashboards
-- Detects threats automatically using 4 alert rules
-- Sends email notifications when attacks are detected
-- Generates weekly automated security reports
+- Collects real SSH authentication logs from Linux servers via rsyslog
+- Simulates game server, player auth, DDoS, and dev SSH log events via Python
+- Parses raw log messages into structured searchable fields using extractors
+- Routes events into logical streams for targeted analysis and alerting
+- Displays real-time security data across 5 purpose-built dashboards with 20 widgets
+- Detects threats automatically using 4 correlation alert rules
+- Sends email notifications when attacks are detected via Gmail SMTP
+- Generates weekly automated security reports via Python API queries
 
 ---
 
-## Architecture
-
-
-## Architecture diagram
+## Architecture Diagram
 
 ![Catnip Games SIEM Architecture](assets/catnip-siem-architecture.svg)
+
+The diagram above shows the complete data flow — from log sources on the left, through Graylog inputs, extractors, and stream routing, into OpenSearch storage, and out through dashboards, alerts, and automated reports to the SOC team. Each layer is labelled with the team member responsible for that component.
 
 ---
 
@@ -76,17 +92,22 @@ Catnip-Siem/
 ├── docker-compose.yml          # Full stack definition
 ├── .env.example                # Environment variable template
 ├── .gitignore                  # Excludes secrets and generated files
-├── bootstrap.sh                # One-command automated setup
+├── bootstrap.sh                # One-command setup — Mac, Linux, WSL
+├── bootstrap.ps1               # One-command setup — Windows PowerShell
+├── bootstrap.bat               # One-command setup — Windows CMD
 ├── scripts/
 │   ├── log_generator.py        # Simulates Catnip Games infrastructure
 │   └── report_generator.py     # Automated weekly security report
 ├── content-packs/
-│   └── *.json                  # Graylog streams, alerts, dashboards
+│   └── catnip-siem-pack.json   # Full Graylog config — streams, alerts,
+│                               # dashboards, extractors, notifications
+├── assets/
+│   └── catnip-siem-architecture.svg
 └── docs/
-    ├── platform-setup.md       # Infrastructure and Docker setup
-    ├── log-ingestion.md        # Inputs, extractors, streams
-    ├── alert-rules.md          # Alert definitions and remediation
-    └── dashboards.md           # Dashboard design and widget reference
+    ├── platform-setup.md       # Infrastructure and Docker setup (Stephen)
+    ├── log-ingestion.md        # Inputs, extractors, streams (Lekan)
+    ├── alert-rules.md          # Alert definitions and remediation (Faith)
+    └── dashboards.md           # Dashboard design and widget reference (Akhamas)
 ```
 
 ---
@@ -109,11 +130,11 @@ Before you begin, make sure you have the following installed:
 
 ---
 
-## Quick Start — Get Running in 5 Minutes
+## Quick Start — Fully Automated Setup
+
+The bootstrap scripts handle everything automatically — Docker startup, content pack installation (restoring all streams, dashboards, alert rules, and extractors), Python dependencies, and the log generator. One command and you have a fully running SIEM.
 
 ### Step 1 — Clone the repository
-
-Open your terminal (Mac/Linux) or WSL terminal (Windows) and run:
 
 ```bash
 git clone https://github.com/Captnfresh/Catnip-Siem.git
@@ -126,7 +147,7 @@ cd Catnip-Siem
 cp .env.example .env
 ```
 
-Open `.env` and fill in the values. The team will share the actual values privately via WhatsApp. The file looks like this:
+Open `.env` and fill in the values shared privately with the team via WhatsApp:
 
 ```
 GRAYLOG_PASSWORD_SECRET=
@@ -141,46 +162,82 @@ SMTP_PASSWORD=
 
 ### Step 3 — Run the bootstrap script
 
+**Mac / Linux / WSL:**
 ```bash
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
+**Windows PowerShell:**
+```powershell
+.\bootstrap.ps1
+```
+
+**Windows CMD:**
+```
+bootstrap.bat
+```
+
 The bootstrap script automatically:
 - Detects your operating system
-- Sets the required OpenSearch kernel setting on Linux/WSL
+- Sets the required OpenSearch kernel setting on Linux/WSL (skipped on Mac/Windows)
 - Starts all three Docker containers
 - Waits for Graylog to become healthy
+- Uploads and installs the content pack — restoring all inputs, extractors, streams, dashboards, alert rules, and email notifications
 - Installs Python dependencies
+- Starts the log generator in the background
 
 **Expected output:**
 
 ```
-=============================================
-  Catnip Games SIEM - Bootstrap
-=============================================
-[1/5] Checking dependencies...
-[OK] Docker and Python3 found
-[2/5] Configuring system settings...
+=============================================================
+   Catnip Games International — SIEM Bootstrap
+=============================================================
+
+[1/7] Detecting operating system...
+[OK] WSL (Windows Subsystem for Linux) detected
+
+[2/7] Checking dependencies...
+[OK] Docker found: Docker version 27.x
+[OK] Docker Compose found
+[OK] Python3 found: Python 3.12.x
+
+[3/7] Configuring system settings...
 [OK] vm.max_map_count set to 262144
-[3/5] Checking environment configuration...
+
+[4/7] Checking environment configuration...
 [OK] .env file found
-[4/5] Starting Docker containers...
+
+[5/7] Starting Docker containers...
 [OK] Graylog is healthy
-[5/5] Installing Python dependencies...
-[OK] Python dependencies installed
-=============================================
-  Bootstrap complete!
-=============================================
+
+[6/7] Installing Graylog content pack...
+[OK] Content pack uploaded
+[OK] Content pack installed — streams, alerts, dashboards, notifications restored
+
+[7/7] Installing Python dependencies and starting log generator...
+[OK] Python requests library installed
+[OK] Log generator started (PID: XXXXX)
+
+=============================================================
+   Bootstrap complete!
+=============================================================
+
+  Graylog UI:      http://localhost:9000
+  Username:        admin
+  Password:        (from your .env file)
+
+  Log generator:   running in background
+  Generator logs:  logs/generator.log
 ```
 
-### Step 4 — Verify containers are running
+### Step 4 — Verify everything is running
 
 ```bash
 docker compose ps
 ```
 
-You should see all three containers with status `Up`:
+All three containers should show `Up`:
 
 ```
 NAME                IMAGE                                    STATUS
@@ -189,48 +246,24 @@ catnip-mongodb      mongo:7                                  Up
 catnip-opensearch   opensearchproject/opensearch:2.15.0     Up
 ```
 
-> If Graylog shows `(healthy)` — you are ready to proceed.
-
 ### Step 5 — Access Graylog
 
-Open your browser and go to:
+Open your browser and go to `http://localhost:9000`
 
-```
-http://localhost:9000
-```
+Log in with username `admin` and the password from your `.env` file.
 
-Log in with:
-- **Username:** `admin`
-- **Password:** shared privately with team via WhatsApp
+### Step 6 — Configure rsyslog for real SSH logs (Linux/WSL only)
 
-### Step 6 — Import the content pack
-
-The content pack restores all streams, alert rules, and notifications automatically.
-
-1. In Graylog, click **System** in the top menu
-2. Click **Content Packs**
-3. Click **Upload** (top right)
-4. Select the JSON file from the `content-packs/` folder
-5. Click **Install**
-
-You should now see:
-- 2 streams running (`ssh-auth`, `game_server`)
-- 4 alert rules configured
-- Email notification set up
-
-### Step 7 — Configure rsyslog (SSH log forwarding)
-
-This forwards real SSH logs from your machine to Graylog.
+This step forwards real SSH authentication events from your machine into Graylog. Skip this step on Mac or Windows.
 
 ```bash
 sudo apt update && sudo apt install -y rsyslog openssh-server
 sudo nano /etc/rsyslog.d/60-graylog.conf
 ```
 
-Paste this content:
+Paste this:
 
 ```
-# Forward auth logs (SSH) to Graylog via TCP syslog
 auth,authpriv.* action(
   type="omfwd"
   target="127.0.0.1"
@@ -239,97 +272,73 @@ auth,authpriv.* action(
 )
 ```
 
-Save with `Ctrl+X`, `Y`, `Enter`. Then restart rsyslog:
+Save with `Ctrl+X`, `Y`, `Enter`, then restart:
 
 ```bash
 sudo systemctl restart rsyslog
 sudo service ssh start
 ```
 
-### Step 8 — Start the log generator
-
-The log generator simulates game server, player auth, DDoS, and SSH brute force events. This populates your dashboards with realistic data.
-
-```bash
-export GRAYLOG_PASS=your_admin_password
-cd scripts
-nohup python3 log_generator.py > ../logs/generator.log 2>&1 &
-```
-
-You should see a process ID printed. The generator runs in the background continuously.
-
-To verify it is running:
-
-```bash
-ps aux | grep log_generator | grep -v grep
-```
-
-### Step 9 — Verify data is flowing
-
-Go to Graylog → **Search** → set time range to **Last 5 minutes** → click search.
-
-You should see events arriving from `catnip-simulator` with fields like `event_type`, `action`, `source_ip`, `username`.
-
-### Step 10 — Generate a security report
+### Step 7 — Generate a security report
 
 ```bash
 export GRAYLOG_PASS=your_admin_password
 python3 scripts/report_generator.py
 ```
 
-The report is saved to `reports/security_report_YYYY-MM-DD_HH-MM.txt` and also printed to the terminal.
+The report is saved to `reports/security_report_YYYY-MM-DD_HH-MM.txt` and printed to the terminal.
 
 ---
 
 ## Dashboards
 
-Five dashboards were built covering different aspects of the Catnip Games security posture:
+Five dashboards answer specific security questions about the Catnip Games environment:
 
-| Dashboard | Purpose | Key Widgets |
+| Dashboard | Security question it answers | Key widgets |
 |---|---|---|
-| Security Overview | High-level daily summary | Total events, timeline, event types, critical count |
-| SSH Auth Monitoring | SSH brute force detection | Failed logins over time, top attacking IPs, targeted usernames |
-| Game Server Health | DDoS and traffic monitoring | DDoS over time, targeted servers, normal vs attack traffic |
-| Player Auth Monitoring | Credential stuffing detection | Login outcomes, targeted players, attacker IPs |
-| Dev Environment Security | Developer server monitoring | Dev SSH activity, suspicious logins, targeted accounts |
+| Security Overview | What is the overall threat picture today? | Total events, timeline, event type breakdown, critical count |
+| SSH Auth Monitoring | Are we under SSH brute force attack? | Failed logins over time, top attacking IPs, targeted usernames |
+| Game Server Health | Are our game servers under DDoS attack? | DDoS over time, targeted servers, normal vs attack traffic |
+| Player Auth Monitoring | Are player accounts being compromised? | Login outcomes, targeted players, credential stuffing timeline |
+| Dev Environment Security | Has anyone accessed our dev servers suspiciously? | Dev SSH activity, suspicious logins, targeted accounts |
 
-> **Using the Global Override:** The time selector at the top of each dashboard controls all widgets simultaneously. Change it to see different time perspectives — last hour, last 24 hours, last 7 days — without editing individual widgets.
+> **Using the Global Override:** The time selector at the top of each dashboard controls all 20 widgets simultaneously. Change it to see different time perspectives — last hour, last 24 hours, last 7 days — in one click.
 
 ---
 
 ## Alert Rules
 
-Four automated alert rules detect the primary threats in the Catnip Games environment:
+Four automated alert rules fire email notifications when threats are detected:
 
 ### Alert 1 — SSH Brute Force Detection
 - **Triggers when:** A single IP generates 10+ failed SSH logins within 5 minutes
 - **Why this threshold:** Fewer than 10 could be a legitimate user mistyping their password. 10+ indicates automated password guessing tools.
-- **Response:** Block the IP, review targeted usernames, check for successful logins from same IP
+- **Immediate response:** Block the IP, review targeted usernames, check for successful logins from same IP
 
 ### Alert 2 — DDoS Attack Detected
 - **Triggers when:** Any single DDoS event is detected
-- **Why immediate:** There is no safe threshold for DDoS. Any detection event requires immediate response.
-- **Response:** Activate DDoS mitigation, block source IP, enable rate limiting
+- **Why immediate trigger:** There is no safe threshold for DDoS. Any detection event requires immediate response.
+- **Immediate response:** Activate DDoS mitigation, block source IP, enable rate limiting
 
 ### Alert 3 — Credential Stuffing Attack
 - **Triggers when:** A single IP generates 20+ credential stuffing attempts within 5 minutes
-- **Why this threshold:** 20 was chosen to distinguish automated tooling from normal failed login activity
-- **Response:** Block IP, force password reset, enable CAPTCHA
+- **Why this threshold:** 20 was chosen to distinguish automated tooling from normal high-volume player activity
+- **Immediate response:** Block IP, force password reset for targeted accounts, enable CAPTCHA
 
 ### Alert 4 — Suspicious Dev SSH Login
 - **Triggers when:** Any suspicious login to a developer server is detected
-- **Why immediate:** Dev servers contain source code and deployment credentials. Any suspicious access is critical.
-- **Response:** Revoke access, review session, check for lateral movement
+- **Why immediate trigger:** Dev servers contain source code and deployment credentials. Any suspicious access is a potential full infrastructure compromise.
+- **Immediate response:** Revoke access immediately, review session, check for lateral movement
 
 ---
 
-## Log Generator — What It Simulates
+## Log Generator — What It Simulates and Why
 
-Since physical access to 300 game servers is not available in this prototype, a Python script simulates the log traffic those servers would generate. This is standard practice in security engineering — synthetic log generation is used to test SIEM configurations before real infrastructure is connected.
+Since physical access to 300 game servers is not available in this prototype, a Python script simulates the log traffic those servers would generate. This is standard practice in security engineering — synthetic log generation is used to test and validate SIEM configurations before real infrastructure is connected. The log formats, field structures, and event types are identical to what real servers would produce.
 
-The generator sends 8 event types via GELF to Graylog:
+The generator sends 8 event types via GELF UDP to Graylog:
 
-| Event Type | Description | Severity |
+| Event type | Description | Severity |
 |---|---|---|
 | player_auth success | Player logged in successfully | Info |
 | player_auth failed | Player login failed | Warning |
@@ -340,46 +349,46 @@ The generator sends 8 event types via GELF to Graylog:
 | player_auth credential_stuffing | Credential stuffing burst | Critical |
 | sshd brute force | SSH brute force from attacker IP | Critical |
 
-> **Day/night simulation:** The generator adjusts event weights based on time of day. During business hours (8am-10pm) legitimate activity dominates. At night, attack patterns increase — reflecting real-world attacker behaviour.
+> **Day/night simulation:** The generator adjusts event weights by time of day. During business hours (8am–10pm) legitimate activity dominates. At night, attack patterns increase — reflecting real-world attacker behaviour patterns documented in threat intelligence research.
 
 ---
 
 ## Automated Report
 
-The report generator queries the Graylog API and produces a formatted weekly security summary covering:
+The report generator queries the Graylog REST API and produces a formatted weekly security summary. This addresses the assessment requirement for automation beyond dashboards — the report can be scheduled via cron to run automatically.
 
-- Executive summary with overall risk level
-- SSH authentication analysis with failure rate
+Report sections:
+- Executive summary with calculated risk level
+- SSH authentication analysis with failure rate percentage
 - Player authentication analysis
-- Top 10 attacking IP addresses
+- Top 10 attacking IP addresses ranked by event count
 - Most targeted usernames
 - Most targeted game servers
-- Recent DDoS incidents with timestamps
-- Dynamic security recommendations
+- Recent DDoS incidents with timestamps and traffic volumes
+- Dynamic security recommendations triggered by threshold breaches
 
-Risk levels are calculated automatically:
+Risk levels are calculated automatically based on critical event volume:
 
-| Critical Events | Risk Level |
+| Critical events | Risk level |
 |---|---|
 | > 10,000 | CRITICAL — Immediate investigation required |
-| > 5,000 | HIGH — Elevated threat activity |
+| > 5,000 | HIGH — Elevated threat activity detected |
 | > 1,000 | MEDIUM — Monitor closely |
-| < 1,000 | LOW — Normal activity |
+| < 1,000 | LOW — Normal activity levels |
 
 ---
 
 ## OS Compatibility
 
-This project runs on all major operating systems with no changes to any configuration files.
-
-| Environment | Supported | Notes |
+| Environment | Supported | Bootstrap script |
 |---|---|---|
-| Windows + WSL | Yes | Bootstrap handles kernel settings |
-| Windows + Docker Desktop | Yes | No extra steps needed |
-| Mac + Docker Desktop | Yes | No extra steps needed |
-| Native Linux | Yes | Kernel setting applied once permanently |
+| Windows + WSL | Yes | `./bootstrap.sh` |
+| Windows PowerShell | Yes | `.\bootstrap.ps1` |
+| Windows CMD | Yes | `bootstrap.bat` |
+| Mac + Docker Desktop | Yes | `./bootstrap.sh` |
+| Native Linux | Yes | `./bootstrap.sh` |
 
-> The only OS-specific step is the OpenSearch `vm.max_map_count` kernel setting. The bootstrap script detects the OS and handles this automatically.
+> The only OS-specific difference is the OpenSearch `vm.max_map_count` kernel setting. The bootstrap scripts detect the OS and handle this automatically — Mac and Windows Docker Desktop manage this internally, Linux and WSL require explicit configuration.
 
 ---
 
@@ -394,100 +403,79 @@ On Windows, Docker Desktop showed "Starting the Docker Engine..." indefinitely a
 A lingering `com.docker.backend.exe` process from a previous session was blocking Docker Desktop from starting cleanly.
 
 **How we fixed it:**
-When Docker Desktop showed the "Lingering processes detected" popup, we clicked **"Stop processes"** to kill the blocking process. Docker Desktop then started successfully within 2-3 minutes.
+When Docker Desktop showed the "Lingering processes detected" popup, we clicked **"Stop processes"**. Docker Desktop then started successfully within 2–3 minutes.
 
 **What it taught us:**
-Always fully quit Docker Desktop before restarting Windows. Use the system tray icon → Quit Docker Desktop rather than just closing the window.
+Always fully quit Docker Desktop using the system tray icon before restarting Windows — closing the window does not stop the background engine.
 
-> **Alternative fix if the popup doesn't appear:** Open Task Manager → find `com.docker.backend.exe` → End task → restart Docker Desktop.
+> **Alternative fix:** Open Task Manager → find `com.docker.backend.exe` → End task → restart Docker Desktop.
 
 ---
 
 ### Problem 2 — OpenSearch container keeps restarting
 
 **What happened:**
-After running `docker compose up -d`, the OpenSearch container showed status `Restarting (1)` repeatedly instead of `Up`.
+After `docker compose up -d`, the OpenSearch container showed `Restarting (1)` repeatedly instead of `Up`.
 
 **What caused it:**
-The Linux kernel setting `vm.max_map_count` was too low. OpenSearch requires this to be at least 262144 to function. The default value on Linux is 65536.
+The Linux kernel setting `vm.max_map_count` was too low. OpenSearch requires at least 262144 — the Linux default is 65536.
 
 **How we fixed it:**
-
 ```bash
 sudo sysctl -w vm.max_map_count=262144
-```
-
-To make it permanent across reboots:
-
-```bash
 echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
 ```
 
 **What it taught us:**
-OpenSearch is not a normal application — it memory-maps large index files for performance and needs a higher virtual memory map count than the Linux default allows. This is a known requirement documented by OpenSearch and is the most common cause of OpenSearch startup failures.
+OpenSearch memory-maps large index files for performance. This is a documented requirement and the most common cause of OpenSearch startup failure. The bootstrap script now handles this automatically.
 
 ---
 
 ### Problem 3 — Graylog stays unhealthy and cannot reach OpenSearch
 
 **What happened:**
-Graylog logs showed it repeatedly trying to connect to `127.0.0.1:9200` and failing with connection refused. The container status showed `(unhealthy)`.
+Graylog logs showed repeated connection failures to `127.0.0.1:9200`. Container showed `(unhealthy)`.
 
 **What caused it:**
-Inside a Docker container, `127.0.0.1` refers to the container itself — not the host machine or other containers. Graylog was trying to reach OpenSearch on its own loopback address where nothing was listening.
+Inside a Docker container, `127.0.0.1` refers to the container itself — not the host or other containers. Graylog was trying to reach OpenSearch on its own loopback address.
 
 **How we fixed it:**
-Changed the OpenSearch connection string in `docker-compose.yml` to use the Docker service name instead:
-
 ```yaml
 GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
 ```
 
-Docker's internal DNS resolves service names to the correct container IP automatically on the `catnip-net` network.
+Docker's internal DNS resolves service names on the `catnip-net` network automatically.
 
 **What it taught us:**
-Docker containers communicate using service names defined in `docker-compose.yml`, not IP addresses or localhost. This is a fundamental Docker networking concept that affects every multi-container deployment.
+Docker containers must communicate using service names defined in `docker-compose.yml`, not IP addresses or localhost. This is a fundamental Docker networking concept.
 
 ---
 
 ### Problem 4 — SSH extractor showing mixed case values
 
 **What happened:**
-The `action` field in Graylog was showing both `Failed` (capital F from real rsyslog messages) and `failed` (lowercase from GELF generator messages). Dashboard widgets showed duplicate legend entries and queries using `action:failed` missed real SSH events.
+The `action` field showed both `Failed` (from rsyslog) and `failed` (from GELF generator). Dashboard queries using `action:failed` missed real SSH events. Widgets showed duplicate legend entries.
 
 **What caused it:**
-Real SSH log messages from rsyslog use title case — "Failed password", "Accepted password". The Python generator used lowercase consistently. The extractor regex captured the value as-is without normalising the case.
+Real SSH logs from rsyslog use title case. The Python generator used lowercase. The extractor captured values as-is with no normalisation.
 
 **How we fixed it:**
-Updated the `extract_action` extractor regex to use a case-insensitive flag and added a Lowercase string converter:
-
 ```
 Regex: (?i)(failed|accepted|invalid)
 Converter: Lowercase string
 ```
 
-This normalises all new incoming values to lowercase. Historical capitalised values remain in OpenSearch but fade out over time as new normalised events replace them.
-
 **What it taught us:**
-Log normalisation is critical in a SIEM. When logs come from multiple sources — real systems and simulated ones — inconsistencies in field values break queries and dashboards. Extractors should always normalise to a consistent format.
+Log normalisation is critical when ingesting from multiple sources. Inconsistent field values silently break queries and dashboards. Extractors should always normalise to a consistent format — this is why the lowercase converter exists.
 
 ---
 
 ### Problem 5 — GitHub push rejected due to email privacy
 
 **What happened:**
-Running `git push` returned an error:
-
-```
-remote: error: GH007: Your push would publish a private email address.
-```
-
-**What caused it:**
-GitHub's email privacy protection was enabled on the account. The git config had a real email address that GitHub refused to expose publicly in commit history.
+`git push` returned `GH007: Your push would publish a private email address`.
 
 **How we fixed it:**
-Two options — either make the email public in GitHub Settings, or use the GitHub no-reply email address:
-
 ```bash
 git config --global user.email "username@users.noreply.github.com"
 git commit --amend --reset-author --no-edit
@@ -495,56 +483,53 @@ git push
 ```
 
 **What it taught us:**
-GitHub provides a no-reply email address specifically for this purpose. Using it keeps personal email addresses private while still allowing commits to be attributed correctly.
+GitHub provides a no-reply address specifically for this. Use it to keep personal email addresses private while still attributing commits correctly.
 
 ---
 
 ### Problem 6 — Team member could not push to repository
 
 **What happened:**
-A team member ran `git push` and received authentication errors despite entering their GitHub password correctly. Two separate issues occurred.
+Authentication errors on `git push` despite correct password entry. Two separate issues:
 
 **Issue A — Collaborator invitation not accepted:**
-The team member had not accepted the GitHub collaborator invitation sent to their email. GitHub requires explicit acceptance before granting push access to a repository.
+GitHub requires explicit acceptance of the collaborator invitation before granting push access.
 
-**Fix:** Check email for invitation from GitHub, click Accept, then retry the push.
+**Fix:** Check email for GitHub invitation → Accept → retry push.
 
 **Issue B — Personal Access Token missing repo scope:**
-After accepting the invitation, the team member generated a Personal Access Token but did not tick the `repo` checkbox when creating it. A token without repo scope cannot push to repositories.
+Token was generated without ticking the `repo` checkbox. A token without repo scope silently fails on push.
 
-**Fix:** Generate a new token at:
-
+**Fix:**
 ```
 GitHub → Settings → Developer settings → Personal access tokens
-→ Tokens (classic) → Generate new token
+→ Tokens (classic) → Generate new token → tick repo → copy immediately
 ```
 
-Make sure to tick **`repo`** — this grants full repository access. Copy the token immediately as GitHub only shows it once. Use this token as the password when Git prompts for credentials.
-
 **What it taught us:**
-GitHub removed password authentication for Git operations in 2021. Personal Access Tokens are now required. The scope selection when creating the token is critical — a token without the right scope is silently useless.
+GitHub removed password authentication for Git operations in 2021. PATs are required. The scope selection is critical — a token without the right scope gives no error message, it just fails silently.
 
 ---
 
 ## Restarting After a Break
 
-If you close your laptop or restart WSL, run these commands to get everything back up:
+When you close your laptop or restart WSL, all containers stop and the log generator process dies. Run these commands to restore everything:
 
 ```bash
-# Start Docker containers
 cd ~/catnip-siem
+
+# Start containers
 docker compose up -d
 
-# Verify all containers are healthy
+# Verify health
 docker compose ps
 
-# Restart the log generator
+# Restart log generator
 export GRAYLOG_PASS=your_admin_password
-cd scripts
-nohup python3 log_generator.py > ../logs/generator.log 2>&1 &
+nohup python3 scripts/log_generator.py > logs/generator.log 2>&1 &
 
-# Access Graylog
-# Open browser → http://localhost:9000
+# Open Graylog
+# http://localhost:9000
 ```
 
 ---
@@ -553,11 +538,11 @@ nohup python3 log_generator.py > ../logs/generator.log 2>&1 &
 
 | Name | Role | Contribution |
 |---|---|---|
-| Adebowale (Team Lead) | Architecture & Python | Docker infrastructure, log generator, report script, project coordination |
-| Steven | UI Platform | Graylog platform deployment and maintenance |
+| Adebowale (Team Lead) | Architecture & Python | Docker infrastructure, log generator, report script, bootstrap scripts, project coordination |
+| Stephen | UI Platform | Graylog platform deployment and maintenance |
 | Lekan | Log Ingestion | Inputs, extractors, rsyslog configuration, streams |
 | Faith | Alerts | Event definitions, notifications, remediation procedures |
-| Sky | Dashboards | 5 dashboards, 20 widgets, visualisation design |
+| Akhamas | Dashboards | 5 dashboards, 20 widgets, visualisation design |
 | Chamberlain | Documentation | README, process documentation, GitHub repo structure |
 
 ---
@@ -565,16 +550,19 @@ nohup python3 log_generator.py > ../logs/generator.log 2>&1 &
 ## Known Limitations
 
 **Log count cap:**
-The Graylog API returns a maximum of 10,000 messages per query. Event counts in the automated report that show exactly 10,000 are likely higher in reality. This is a Graylog API constraint.
+The Graylog API returns a maximum of 10,000 messages per query. Event counts in the automated report that show exactly 10,000 are likely higher in reality. This is a Graylog API constraint, not a bug.
 
 **Simulated infrastructure:**
-The Python log generator replaces real game server infrastructure. In a production deployment, rsyslog agents on each of the 300 game servers would replace the generator. The log formats and field structures are identical — only the source changes.
+The Python log generator replaces real game server infrastructure. In production, rsyslog agents on each of the 300 game servers would replace the generator. The log formats and field structures are identical — only the source changes.
 
 **Single node deployment:**
 This deployment runs on a single machine with no high availability or failover. The brief mentions 99.9% uptime as a requirement — achieving this in production would require a multi-node OpenSearch cluster and Graylog cluster configuration beyond the scope of this prototype.
 
 **Data retention:**
-No explicit data retention policy has been configured. OpenSearch default retention applies. In production, a 30-day hot storage policy would be configured as specified in the brief.
+No explicit retention policy has been configured. In production, a 30-day hot storage policy would be implemented as specified in the brief.
+
+**Alert fatigue:**
+The current alerting is threshold-based only — it fires whenever a count exceeds a fixed number regardless of whether that count is unusual for that specific IP or user. A behavioural baseline engine that profiles normal activity per entity and scores alerts against that baseline would significantly reduce false positives. This is documented as a future enhancement.
 
 ---
 
@@ -584,6 +572,6 @@ Built for the **Cyber Security Automation** module at the University of Roehampt
 
 - **Scenario:** Catnip Games International SIEM implementation
 - **Work Role:** DCWF 511 — Cyber Defense Analyst
-- **Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats.
+- **Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats
 - **Assessment:** In-lab team demonstration with individual Q&A
-
+```
