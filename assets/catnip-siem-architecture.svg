@@ -1,0 +1,133 @@
+<svg width="680" height="860" viewBox="0 0 680 860" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+
+  <style>
+    .layer-title { font-size: 13px; font-weight: 600; }
+    .layer-sub { font-size: 11px; }
+    .contributor-title { font-size: 12px; font-weight: 600; }
+    .contributor-sub { font-size: 10px; }
+    .legend-text { font-size: 11px; }
+    .section-label { font-size: 15px; font-weight: 700; }
+    .section-sub { font-size: 11px; }
+  </style>
+
+  <rect width="680" height="860" fill="#ffffff" rx="12"/>
+
+  <text x="340" y="28" text-anchor="middle" class="section-label" fill="#1a1a1a">Catnip Games International — SIEM Architecture</text>
+  <text x="340" y="48" text-anchor="middle" class="section-sub" fill="#666">Data flow from log sources to security outputs · team contributions per layer</text>
+
+  <rect x="30" y="68" width="480" height="72" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.8"/>
+  <text x="270" y="90" text-anchor="middle" class="layer-title" fill="#712B13">Layer 1 — Log sources</text>
+  <text x="110" y="114" text-anchor="middle" class="layer-sub" fill="#993C1D">SSH / auth logs</text>
+  <text x="270" y="114" text-anchor="middle" class="layer-sub" fill="#993C1D">Game server simulation</text>
+  <text x="430" y="114" text-anchor="middle" class="layer-sub" fill="#993C1D">Player auth · DDoS · Dev SSH</text>
+  <rect x="524" y="68" width="126" height="72" rx="10" fill="#F0997B" stroke="#993C1D" stroke-width="0.8"/>
+  <text x="587" y="90" text-anchor="middle" class="contributor-title" fill="#4A1B0C">Adebowale</text>
+  <text x="587" y="108" text-anchor="middle" class="contributor-sub" fill="#712B13">Python log</text>
+  <text x="587" y="122" text-anchor="middle" class="contributor-sub" fill="#712B13">generator</text>
+
+  <line x1="270" y1="140" x2="270" y2="162" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="30" y="164" width="480" height="72" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.8"/>
+  <text x="270" y="186" text-anchor="middle" class="layer-title" fill="#0C447C">Layer 2 — Docker infrastructure</text>
+  <text x="110" y="210" text-anchor="middle" class="layer-sub" fill="#185FA5">Graylog 6.1 · port 9000</text>
+  <text x="270" y="210" text-anchor="middle" class="layer-sub" fill="#185FA5">OpenSearch 2.15</text>
+  <text x="430" y="210" text-anchor="middle" class="layer-sub" fill="#185FA5">MongoDB 7</text>
+  <rect x="524" y="164" width="126" height="72" rx="10" fill="#85B7EB" stroke="#185FA5" stroke-width="0.8"/>
+  <text x="587" y="186" text-anchor="middle" class="contributor-title" fill="#042C53">Stephen</text>
+  <text x="587" y="204" text-anchor="middle" class="contributor-sub" fill="#0C447C">Platform setup</text>
+  <text x="587" y="218" text-anchor="middle" class="contributor-sub" fill="#0C447C">and maintenance</text>
+
+  <line x1="270" y1="236" x2="270" y2="258" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="30" y="260" width="480" height="72" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/>
+  <text x="270" y="282" text-anchor="middle" class="layer-title" fill="#3C3489">Layer 3 — Graylog inputs + extractors</text>
+  <text x="110" y="306" text-anchor="middle" class="layer-sub" fill="#534AB7">Syslog TCP :1514</text>
+  <text x="270" y="306" text-anchor="middle" class="layer-sub" fill="#534AB7">Syslog UDP :1514</text>
+  <text x="430" y="306" text-anchor="middle" class="layer-sub" fill="#534AB7">GELF UDP :12201</text>
+  <rect x="524" y="260" width="126" height="72" rx="10" fill="#AFA9EC" stroke="#534AB7" stroke-width="0.8"/>
+  <text x="587" y="282" text-anchor="middle" class="contributor-title" fill="#26215C">Lekan</text>
+  <text x="587" y="300" text-anchor="middle" class="contributor-sub" fill="#3C3489">Inputs · extractors</text>
+  <text x="587" y="314" text-anchor="middle" class="contributor-sub" fill="#3C3489">rsyslog · streams</text>
+
+  <line x1="270" y1="332" x2="270" y2="354" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="30" y="356" width="480" height="72" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="270" y="378" text-anchor="middle" class="layer-title" fill="#085041">Layer 4 — Parsing + normalisation + streams</text>
+  <text x="110" y="402" text-anchor="middle" class="layer-sub" fill="#0F6E56">event_type · action</text>
+  <text x="270" y="402" text-anchor="middle" class="layer-sub" fill="#0F6E56">username · source_ip</text>
+  <text x="430" y="402" text-anchor="middle" class="layer-sub" fill="#0F6E56">ssh-auth · game-server</text>
+  <rect x="524" y="356" width="126" height="72" rx="10" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="587" y="378" text-anchor="middle" class="contributor-title" fill="#04342C">Lekan</text>
+  <text x="587" y="396" text-anchor="middle" class="contributor-sub" fill="#085041">Regex extractors</text>
+  <text x="587" y="410" text-anchor="middle" class="contributor-sub" fill="#085041">stream rules</text>
+
+  <line x1="270" y1="428" x2="270" y2="450" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="30" y="452" width="480" height="56" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.8"/>
+  <text x="270" y="474" text-anchor="middle" class="layer-title" fill="#444441">Layer 5 — Storage</text>
+  <text x="190" y="496" text-anchor="middle" class="layer-sub" fill="#5F5E5A">OpenSearch — log index + search</text>
+  <text x="400" y="496" text-anchor="middle" class="layer-sub" fill="#5F5E5A">MongoDB — config</text>
+  <rect x="524" y="452" width="126" height="56" rx="10" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.8"/>
+  <text x="587" y="474" text-anchor="middle" class="contributor-title" fill="#2C2C2A">Stephen</text>
+  <text x="587" y="492" text-anchor="middle" class="contributor-sub" fill="#444441">Container health</text>
+
+  <line x1="104" y1="508" x2="104" y2="546" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="270" y1="508" x2="270" y2="546" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="436" y1="508" x2="436" y2="546" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="30" y="548" width="148" height="80" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.8"/>
+  <text x="104" y="572" text-anchor="middle" class="layer-title" fill="#0C447C">5 dashboards</text>
+  <text x="104" y="590" text-anchor="middle" class="layer-sub" fill="#185FA5">20 widgets</text>
+  <text x="104" y="612" text-anchor="middle" class="contributor-title" fill="#0C447C">Akhamas</text>
+
+  <rect x="196" y="548" width="148" height="80" rx="10" fill="#FCEBEB" stroke="#A32D2D" stroke-width="0.8"/>
+  <text x="270" y="572" text-anchor="middle" class="layer-title" fill="#791F1F">4 alert rules</text>
+  <text x="270" y="590" text-anchor="middle" class="layer-sub" fill="#A32D2D">Email via Gmail</text>
+  <text x="270" y="612" text-anchor="middle" class="contributor-title" fill="#791F1F">Faith</text>
+
+  <rect x="362" y="548" width="148" height="80" rx="10" fill="#EAF3DE" stroke="#3B6D11" stroke-width="0.8"/>
+  <text x="436" y="572" text-anchor="middle" class="layer-title" fill="#27500A">Python report</text>
+  <text x="436" y="590" text-anchor="middle" class="layer-sub" fill="#3B6D11">Weekly summary</text>
+  <text x="436" y="612" text-anchor="middle" class="contributor-title" fill="#27500A">Adebowale</text>
+
+  <rect x="524" y="548" width="126" height="80" rx="10" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.8"/>
+  <text x="587" y="572" text-anchor="middle" class="layer-title" fill="#633806">Docs + README</text>
+  <text x="587" y="590" text-anchor="middle" class="layer-sub" fill="#854F0B">GitHub repo</text>
+  <text x="587" y="612" text-anchor="middle" class="contributor-title" fill="#633806">Chamberlain</text>
+
+  <line x1="104" y1="628" x2="250" y2="662" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="270" y1="628" x2="270" y2="662" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="436" y1="628" x2="290" y2="662" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="140" y="664" width="260" height="56" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.8"/>
+  <text x="270" y="686" text-anchor="middle" class="layer-title" fill="#444441">SOC analysts + security team</text>
+  <text x="270" y="706" text-anchor="middle" class="layer-sub" fill="#5F5E5A">Real-time threat monitoring</text>
+
+  <line x1="30" y1="748" x2="650" y2="748" stroke="#ddd" stroke-width="0.8"/>
+  <text x="340" y="766" text-anchor="middle" class="legend-text" fill="#aaa">Team contributions</text>
+
+  <rect x="30" y="780" width="12" height="12" rx="2" fill="#F0997B" stroke="#993C1D" stroke-width="0.5"/>
+  <text x="48" y="791" class="legend-text" fill="#444">Adebowale — architecture, Python scripts, log generator, report</text>
+
+  <rect x="30" y="804" width="12" height="12" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="48" y="815" class="legend-text" fill="#444">Stephen — Docker platform, infrastructure, container maintenance</text>
+
+  <rect x="370" y="780" width="12" height="12" rx="2" fill="#AFA9EC" stroke="#534AB7" stroke-width="0.5"/>
+  <text x="388" y="791" class="legend-text" fill="#444">Lekan — inputs, extractors, rsyslog, streams</text>
+
+  <rect x="370" y="804" width="12" height="12" rx="2" fill="#F09595" stroke="#A32D2D" stroke-width="0.5"/>
+  <text x="388" y="815" class="legend-text" fill="#444">Faith — alert rules, email notifications</text>
+
+  <rect x="30" y="828" width="12" height="12" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5"/>
+  <text x="48" y="839" class="legend-text" fill="#444">Akhamas — 5 dashboards, 20 widgets, visualisation design</text>
+
+  <rect x="370" y="828" width="12" height="12" rx="2" fill="#FAC775" stroke="#854F0B" stroke-width="0.5"/>
+  <text x="388" y="839" class="legend-text" fill="#444">Chamberlain — README, docs, GitHub repo structure</text>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+</svg>
