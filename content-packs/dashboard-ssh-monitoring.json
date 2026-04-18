@@ -1,0 +1,301 @@
+{
+    "id": "69df4bfc07a7433e1a33ee9c",
+    "type": "DASHBOARD",
+    "title": "SSH Monitoring",
+    "summary": "SSH authentication activity, brute force detection, and attacker analysis",
+    "description": "Real SSH authentication logs from WSL machine. Shows failed logins over time, top attacking IPs, most targeted usernames, and success vs failure ratio.",
+    "search_id": "69df951455be79843bac90f8",
+    "properties": [],
+    "requires": {},
+    "state": {
+        "f88a0d6f-7f2c-4b8e-89c4-f7746d9cc46d": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+                "widget": {
+                    "be7ca14a-def8-4b3c-8a47-35c4aef16744": "Failed SSH Logins Over Time",
+                    "40280c6d-c3f1-4a96-8749-7654b25858b4": "Top Attacking IPs",
+                    "4a2ab69f-12da-40b2-b10a-f7195963e8e6": "Most Targeted Username",
+                    "2e154859-18db-433b-b296-27e9890577f8": "SSH Login Outcomes: Success vs Failed"
+                },
+                "tab": {
+                    "title": "SSH Monitoring"
+                }
+            },
+            "widgets": [
+                {
+                    "id": "4a2ab69f-12da-40b2-b10a-f7195963e8e6",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "timerange": {
+                        "from": 86400,
+                        "type": "relative"
+                    },
+                    "query": {
+                        "type": "elasticsearch",
+                        "query_string": "event_type:sshd AND action:failed"
+                    },
+                    "streams": [],
+                    "stream_categories": [],
+                    "config": {
+                        "row_pivots": [
+                            {
+                                "fields": [
+                                    "username"
+                                ],
+                                "type": "values",
+                                "config": {
+                                    "limit": 10
+                                }
+                            }
+                        ],
+                        "units": {},
+                        "column_pivots": [],
+                        "series": [
+                            {
+                                "config": {
+                                    "name": null
+                                },
+                                "function": "count()"
+                            }
+                        ],
+                        "sort": [
+                            {
+                                "type": "pivot",
+                                "field": "username",
+                                "direction": "Descending"
+                            }
+                        ],
+                        "visualization": "bar",
+                        "visualization_config": {
+                            "barmode": "group",
+                            "axis_type": "linear"
+                        },
+                        "formatting_settings": null,
+                        "rollup": false,
+                        "event_annotation": false,
+                        "row_limit": 10,
+                        "column_limit": null
+                    }
+                },
+                {
+                    "id": "2e154859-18db-433b-b296-27e9890577f8",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "timerange": {
+                        "from": 86400,
+                        "type": "relative"
+                    },
+                    "query": {
+                        "type": "elasticsearch",
+                        "query_string": "event_type:sshd"
+                    },
+                    "streams": [],
+                    "stream_categories": [],
+                    "config": {
+                        "row_pivots": [
+                            {
+                                "fields": [
+                                    "timestamp"
+                                ],
+                                "type": "time",
+                                "config": {
+                                    "interval": {
+                                        "type": "auto",
+                                        "scaling": 1.0
+                                    }
+                                }
+                            }
+                        ],
+                        "units": {},
+                        "column_pivots": [
+                            {
+                                "fields": [
+                                    "action"
+                                ],
+                                "type": "values",
+                                "config": {
+                                    "limit": 15
+                                }
+                            }
+                        ],
+                        "series": [
+                            {
+                                "config": {
+                                    "name": null
+                                },
+                                "function": "count()"
+                            }
+                        ],
+                        "sort": [],
+                        "visualization": "bar",
+                        "visualization_config": {
+                            "barmode": "stack",
+                            "axis_type": "linear"
+                        },
+                        "formatting_settings": null,
+                        "rollup": false,
+                        "event_annotation": false,
+                        "row_limit": null,
+                        "column_limit": 15
+                    }
+                },
+                {
+                    "id": "40280c6d-c3f1-4a96-8749-7654b25858b4",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "timerange": {
+                        "from": 86400,
+                        "type": "relative"
+                    },
+                    "query": {
+                        "type": "elasticsearch",
+                        "query_string": "event_type:sshd AND action:failed"
+                    },
+                    "streams": [],
+                    "stream_categories": [],
+                    "config": {
+                        "row_pivots": [
+                            {
+                                "fields": [
+                                    "source_ip"
+                                ],
+                                "type": "values",
+                                "config": {
+                                    "limit": 15
+                                }
+                            }
+                        ],
+                        "units": {},
+                        "column_pivots": [],
+                        "series": [
+                            {
+                                "config": {
+                                    "name": null
+                                },
+                                "function": "count()"
+                            }
+                        ],
+                        "sort": [],
+                        "visualization": "bar",
+                        "visualization_config": {
+                            "barmode": "group",
+                            "axis_type": "linear"
+                        },
+                        "formatting_settings": null,
+                        "rollup": false,
+                        "event_annotation": false,
+                        "row_limit": 15,
+                        "column_limit": null
+                    }
+                },
+                {
+                    "id": "be7ca14a-def8-4b3c-8a47-35c4aef16744",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "timerange": {
+                        "from": 86400,
+                        "type": "relative"
+                    },
+                    "query": {
+                        "type": "elasticsearch",
+                        "query_string": "event_type:sshd AND action:Failed"
+                    },
+                    "streams": [],
+                    "stream_categories": [],
+                    "config": {
+                        "row_pivots": [
+                            {
+                                "fields": [
+                                    "timestamp"
+                                ],
+                                "type": "time",
+                                "config": {
+                                    "interval": {
+                                        "type": "auto",
+                                        "scaling": 1.0
+                                    }
+                                }
+                            }
+                        ],
+                        "units": {},
+                        "column_pivots": [],
+                        "series": [
+                            {
+                                "config": {
+                                    "name": null
+                                },
+                                "function": "count()"
+                            }
+                        ],
+                        "sort": [],
+                        "visualization": "line",
+                        "visualization_config": {
+                            "interpolation": "linear",
+                            "axis_type": "linear"
+                        },
+                        "formatting_settings": null,
+                        "rollup": false,
+                        "event_annotation": false,
+                        "row_limit": null,
+                        "column_limit": null
+                    }
+                }
+            ],
+            "widget_mapping": {
+                "4a2ab69f-12da-40b2-b10a-f7195963e8e6": [
+                    "2ad527dc-8944-4778-bf1a-1c9ce6d61c15"
+                ],
+                "2e154859-18db-433b-b296-27e9890577f8": [
+                    "6389d8ef-b80b-480c-9ee7-0cacc585a7f4"
+                ],
+                "be7ca14a-def8-4b3c-8a47-35c4aef16744": [
+                    "9b3e6170-1711-40ab-a6c4-250e0e8ccfd0"
+                ],
+                "40280c6d-c3f1-4a96-8749-7654b25858b4": [
+                    "43e45659-ff2b-4a5f-be2b-82e5eca2433c"
+                ]
+            },
+            "positions": {
+                "be7ca14a-def8-4b3c-8a47-35c4aef16744": {
+                    "col": 1,
+                    "row": 13,
+                    "height": 4,
+                    "width": "Infinity"
+                },
+                "4a2ab69f-12da-40b2-b10a-f7195963e8e6": {
+                    "col": 1,
+                    "row": 5,
+                    "height": 4,
+                    "width": "Infinity"
+                },
+                "40280c6d-c3f1-4a96-8749-7654b25858b4": {
+                    "col": 1,
+                    "row": 9,
+                    "height": 4,
+                    "width": "Infinity"
+                },
+                "2e154859-18db-433b-b296-27e9890577f8": {
+                    "col": 1,
+                    "row": 1,
+                    "height": 4,
+                    "width": "Infinity"
+                }
+            },
+            "formatting": {
+                "highlighting": []
+            },
+            "display_mode_settings": {
+                "positions": {}
+            }
+        }
+    },
+    "owner": "admin",
+    "created_at": "2026-04-15T08:22:19.481Z",
+    "last_updated_at": "2026-04-15T13:40:53.727Z",
+    "favorite": false
+}
