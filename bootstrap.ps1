@@ -1,8 +1,7 @@
 # =============================================================
 # Catnip Games SIEM - Bootstrap Script (Windows PowerShell)
 # Supports: Windows PowerShell 5.1+ with Docker Desktop
-# Usage: Right-click → Run with PowerShell
-#        OR in PowerShell: .\bootstrap.ps1
+# Usage: .\bootstrap.ps1
 # =============================================================
 
 $ErrorActionPreference = "Stop"
@@ -12,19 +11,35 @@ $ErrorActionPreference = "Stop"
 # ─────────────────────────────────────────
 function Write-Ok($msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Info($msg) { Write-Host "[..] $msg" -ForegroundColor Yellow }
+function Write-Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Write-Fail($msg) { Write-Host "[ERROR] $msg" -ForegroundColor Red; exit 1 }
 function Write-Step($msg) { Write-Host "`n$msg" -ForegroundColor Cyan }
+
+# Robust .env variable reader — handles CRLF, quotes, and whitespace
+function Read-EnvVar($varName, $envFile) {
+    $line = Get-Content $envFile | Where-Object { $_ -match "^${varName}=" } | Select-Object -First 1
+    if ($line) {
+        $value = ($line -replace "^${varName}=", "").Trim()
+        # Strip trailing \r (CRLF), leading/trailing quotes
+        $value = $value -replace "`r$", ""
+        $value = $value.Trim('"').Trim("'")
+        return $value
+    }
+    return ""
+}
 
 # ─────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────
 $GRAYLOG_URL       = "http://localhost:9000"
 $GRAYLOG_USER      = "admin"
+$CONTENT_PACK_NAME = "Catnip Games SIEM"
 $SCRIPT_DIR        = Split-Path -Parent $MyInvocation.MyCommand.Path
 $CONTENT_PACK_FILE = Join-Path $SCRIPT_DIR "content-packs\catnip-siem-pack.json"
 $SCRIPTS_DIR       = Join-Path $SCRIPT_DIR "scripts"
 $LOGS_DIR          = Join-Path $SCRIPT_DIR "logs"
 $GENERATOR_LOG     = Join-Path $LOGS_DIR "generator.log"
+$envFile           = Join-Path $SCRIPT_DIR ".env"
 
 # ─────────────────────────────────────────
 # Header
@@ -38,7 +53,7 @@ Write-Host ""
 # ─────────────────────────────────────────
 # Step 1 — Check dependencies
 # ─────────────────────────────────────────
-Write-Step "[1/6] Checking dependencies..."
+Write-Step "[1/7] Checking dependencies..."
 
 try {
     $dockerVersion = docker --version 2>&1
@@ -49,7 +64,7 @@ try {
 
 try {
     $composeVersion = docker compose version 2>&1
-    Write-Ok "Docker Compose found: $composeVersion"
+    Write-Ok "Docker Compose found"
 } catch {
     Write-Fail "Docker Compose not found. Please update Docker Desktop."
 }
@@ -65,23 +80,20 @@ try {
 # ─────────────────────────────────────────
 # Step 2 — Check Docker Desktop is running
 # ─────────────────────────────────────────
-Write-Step "[2/6] Checking Docker Desktop is running..."
+Write-Step "[2/7] Checking Docker Desktop is running..."
 
-$dockerRunning = $false
 try {
     docker ps 2>&1 | Out-Null
-    $dockerRunning = $true
     Write-Ok "Docker Desktop is running"
 } catch {
     Write-Fail "Docker Desktop is not running. Please start Docker Desktop and wait for 'Engine running' before running this script."
 }
 
 # ─────────────────────────────────────────
-# Step 3 — Check .env exists
+# Step 3 — Check .env exists and load password
 # ─────────────────────────────────────────
-Write-Step "[3/6] Checking environment configuration..."
+Write-Step "[3/7] Checking environment configuration..."
 
-$envFile = Join-Path $SCRIPT_DIR ".env"
 if (-not (Test-Path $envFile)) {
     Write-Host ""
     Write-Host "[ERROR] .env file not found." -ForegroundColor Red
@@ -90,36 +102,56 @@ if (-not (Test-Path $envFile)) {
     Write-Host "    copy .env.example .env" -ForegroundColor White
     Write-Host ""
     Write-Host "  Then fill in the values shared with your team via WhatsApp." -ForegroundColor Yellow
+    Write-Host "  Required:" -ForegroundColor Yellow
+    Write-Host "    GRAYLOG_PASSWORD_SECRET" -ForegroundColor White
+    Write-Host "    GRAYLOG_ROOT_PASSWORD_SHA2" -ForegroundColor White
+    Write-Host "    GRAYLOG_ADMIN_PASSWORD   (plaintext, for API calls)" -ForegroundColor White
+    Write-Host "    OPENSEARCH_ADMIN_PASSWORD" -ForegroundColor White
+    Write-Host "    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD" -ForegroundColor White
     Write-Host ""
     exit 1
 }
 Write-Ok ".env file found"
 
-# Read admin password for API calls
+# Load plaintext admin password from .env
 $GRAYLOG_PASS = $env:GRAYLOG_PASS
 if (-not $GRAYLOG_PASS) {
-    Write-Host ""
-    $GRAYLOG_PASS = Read-Host "Enter your Graylog admin password (for API calls)" -AsSecureString
-    $GRAYLOG_PASS = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($GRAYLOG_PASS)
-    )
+    $GRAYLOG_PASS = Read-EnvVar "GRAYLOG_ADMIN_PASSWORD" $envFile
 }
+
+if (-not $GRAYLOG_PASS) {
+    Write-Host ""
+    Write-Host "[ERROR] GRAYLOG_ADMIN_PASSWORD not set in .env" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Add this line to your .env file:" -ForegroundColor Yellow
+    Write-Host "    GRAYLOG_ADMIN_PASSWORD=<the plaintext admin password>" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  This is the plaintext whose SHA256 hash is stored in GRAYLOG_ROOT_PASSWORD_SHA2." -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+Write-Ok "Graylog admin credentials loaded from .env"
+
+# Build credential object for REST calls
+$secPass = ConvertTo-SecureString $GRAYLOG_PASS -AsPlainText -Force
+$cred    = New-Object System.Management.Automation.PSCredential($GRAYLOG_USER, $secPass)
+$stdHeaders = @{ "X-Requested-By" = "bootstrap" }
 
 # ─────────────────────────────────────────
 # Step 4 — Start Docker stack
 # ─────────────────────────────────────────
-Write-Step "[4/6] Starting Docker containers..."
+Write-Step "[4/7] Starting Docker containers..."
 
 Write-Info "Running docker compose up -d..."
 Set-Location $SCRIPT_DIR
 docker compose up -d
 
 Write-Host ""
-Write-Info "Waiting for Graylog to become healthy (this takes 1-2 minutes)..."
+Write-Info "Waiting for Graylog to become ready (this takes 1-2 minutes)..."
 
 $retries = 60
 $count   = 0
-$healthy = $false
+$ready   = $false
 
 while ($count -lt $retries) {
     Start-Sleep -Seconds 3
@@ -127,17 +159,14 @@ while ($count -lt $retries) {
     Write-Host -NoNewline "."
 
     try {
-        $response = Invoke-RestMethod `
+        $response = Invoke-WebRequest -UseBasicParsing `
             -Uri "$GRAYLOG_URL/api/system/lbstatus" `
-            -Headers @{ Accept = "application/json" } `
-            -Credential (New-Object System.Management.Automation.PSCredential(
-                $GRAYLOG_USER,
-                (ConvertTo-SecureString $GRAYLOG_PASS -AsPlainText -Force)
-            )) `
+            -Credential $cred `
+            -TimeoutSec 5 `
             -ErrorAction SilentlyContinue
 
-        if ($response -match "ALIVE" -or $response.status -eq "ALIVE") {
-            $healthy = $true
+        if ($response.Content -match "ALIVE") {
+            $ready = $true
             break
         }
     } catch { }
@@ -145,76 +174,106 @@ while ($count -lt $retries) {
 
 Write-Host ""
 
-if (-not $healthy) {
-    Write-Fail "Graylog did not become healthy after $($retries * 3) seconds.`nRun: docker compose logs graylog"
+if (-not $ready) {
+    Write-Fail "Graylog did not become ready after $($retries * 3) seconds.`nRun: docker compose logs graylog"
 }
-Write-Ok "Graylog is healthy"
+Write-Ok "Graylog is ready"
+
+# Verify credentials actually work
+try {
+    $null = Invoke-RestMethod -Uri "$GRAYLOG_URL/api/users" -Credential $cred -Headers $stdHeaders -ErrorAction Stop
+    Write-Ok "Graylog authentication verified"
+} catch {
+    Write-Fail "Graylog authentication failed. Check GRAYLOG_ADMIN_PASSWORD in .env matches the password used to generate GRAYLOG_ROOT_PASSWORD_SHA2."
+}
 
 # ─────────────────────────────────────────
-# Step 5 — Install content pack
+# Step 5 — Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
-Write-Step "[5/6] Installing Graylog content pack..."
+Write-Step "[5/7] Installing Graylog content pack..."
 
-$cred = New-Object System.Management.Automation.PSCredential(
-    $GRAYLOG_USER,
-    (ConvertTo-SecureString $GRAYLOG_PASS -AsPlainText -Force)
-)
+function Find-PackIdByName {
+    try {
+        $packs = Invoke-RestMethod -Uri "$GRAYLOG_URL/api/system/content_packs" -Credential $cred -Headers $stdHeaders
+        $match = $packs.content_packs | Where-Object { $_.name -eq $CONTENT_PACK_NAME } | Select-Object -First 1
+        if ($match) { return $match.id }
+    } catch { }
+    return $null
+}
+
+$packId = $null
 
 if (-not (Test-Path $CONTENT_PACK_FILE)) {
-    Write-Host "[SKIP] Content pack not found at: $CONTENT_PACK_FILE" -ForegroundColor Yellow
+    Write-Warn "Content pack not found at: $CONTENT_PACK_FILE"
     Write-Host "       Install manually: System -> Content Packs -> Upload" -ForegroundColor Yellow
 } else {
-    Write-Info "Uploading content pack to Graylog API..."
+    # Step 5a: Upload (skip if already uploaded)
+    Write-Info "Checking for existing content pack..."
+    $packId = Find-PackIdByName
 
-    try {
-        $packContent = Get-Content $CONTENT_PACK_FILE -Raw
-
-        $uploadResponse = Invoke-RestMethod `
-            -Uri "$GRAYLOG_URL/api/system/content_packs" `
-            -Method POST `
-            -Credential $cred `
-            -Headers @{ "X-Requested-By" = "bootstrap" } `
-            -ContentType "application/json" `
-            -Body $packContent
-
-        $packId = $uploadResponse.id
-        if (-not $packId) { $packId = $uploadResponse.content_pack_id }
-
-        Write-Ok "Content pack uploaded (ID: $packId)"
-
-        Write-Info "Installing content pack..."
-        $installResponse = Invoke-RestMethod `
-            -Uri "$GRAYLOG_URL/api/system/content_packs/$packId/1/installations" `
-            -Method POST `
-            -Credential $cred `
-            -Headers @{ "X-Requested-By" = "bootstrap" } `
-            -ContentType "application/json" `
-            -Body '{"parameters":{},"comment":"Installed by bootstrap script"}'
-
-        Write-Ok "Content pack installed — streams, alerts, dashboards, notifications restored"
-
-    } catch {
-        $statusCode = $_.Exception.Response.StatusCode.value__
-        if ($statusCode -eq 400) {
-            Write-Host "[SKIP] Content pack already exists in Graylog" -ForegroundColor Yellow
-            Write-Ok "Skipping — content pack already installed"
-        } else {
-            Write-Host "[WARN] Content pack installation failed: $_" -ForegroundColor Yellow
-            Write-Host "       Install manually: System -> Content Packs -> Upload" -ForegroundColor Yellow
+    if ($packId) {
+        Write-Ok "Content pack already uploaded (ID: $packId)"
+    } else {
+        Write-Info "Uploading content pack..."
+        try {
+            $packContent = Get-Content $CONTENT_PACK_FILE -Raw
+            Invoke-RestMethod `
+                -Uri "$GRAYLOG_URL/api/system/content_packs" `
+                -Method POST `
+                -Credential $cred `
+                -Headers $stdHeaders `
+                -ContentType "application/json" `
+                -Body $packContent | Out-Null
+            Write-Ok "Content pack uploaded"
+            Start-Sleep -Seconds 1
+            $packId = Find-PackIdByName
+        } catch {
+            Write-Warn "Upload failed: $_"
         }
+    }
+
+    # Step 5b: Install (always attempt — Graylog is idempotent on re-install)
+    if ($packId) {
+        Write-Info "Installing content pack (ID: $packId)..."
+        try {
+            Invoke-RestMethod `
+                -Uri "$GRAYLOG_URL/api/system/content_packs/$packId/1/installations" `
+                -Method POST `
+                -Credential $cred `
+                -Headers $stdHeaders `
+                -ContentType "application/json" `
+                -Body '{"parameters":{},"comment":"Installed by bootstrap"}' | Out-Null
+            Write-Ok "Content pack installed - streams, alerts, dashboards, inputs, notifications restored"
+        } catch {
+            Write-Warn "Install call returned an error (may already be installed): $_"
+        }
+    } else {
+        Write-Warn "Could not resolve content pack ID - install manually via System -> Content Packs"
     }
 }
 
+Start-Sleep -Seconds 3
+
+# Verify at least one input exists
+try {
+    $inputs = Invoke-RestMethod -Uri "$GRAYLOG_URL/api/system/inputs" -Credential $cred -Headers $stdHeaders
+    if ($inputs.total -eq 0) {
+        Write-Warn "No Graylog inputs configured - logs will not be ingested."
+    } else {
+        Write-Ok "$($inputs.total) Graylog input(s) configured"
+    }
+} catch { }
+
 # ─────────────────────────────────────────
-# Step 6 — Install Python deps + start generator
+# Step 6 — Start log generator
 # ─────────────────────────────────────────
-Write-Step "[6/6] Installing Python dependencies and starting log generator..."
+Write-Step "[6/7] Installing Python dependencies and starting log generator..."
 
 try {
     python -m pip install requests --quiet 2>&1 | Out-Null
     Write-Ok "Python requests library installed"
 } catch {
-    Write-Host "[WARN] Could not install requests library. Run manually: pip install requests" -ForegroundColor Yellow
+    Write-Warn "Could not install requests library. Run manually: pip install requests"
 }
 
 if (-not (Test-Path $LOGS_DIR)) {
@@ -223,8 +282,24 @@ if (-not (Test-Path $LOGS_DIR)) {
 
 # Kill any existing generator
 Get-Process -Name "python*" -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowTitle -like "*log_generator*" } |
+    Where-Object { $_.CommandLine -like "*log_generator*" } |
     Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Capture baseline via universal search (works across Graylog versions)
+function Get-MessageCount {
+    try {
+        $resp = Invoke-RestMethod `
+            -Uri "$GRAYLOG_URL/api/search/universal/relative?query=*&range=300&limit=1" `
+            -Credential $cred `
+            -Headers $stdHeaders
+        return [int]$resp.total_results
+    } catch {
+        return 0
+    }
+}
+
+$baselineCount = Get-MessageCount
+Write-Info "Baseline message count: $baselineCount"
 
 $generatorScript = Join-Path $SCRIPTS_DIR "log_generator.py"
 $process = Start-Process python `
@@ -234,12 +309,53 @@ $process = Start-Process python `
     -WindowStyle Hidden `
     -PassThru
 
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 
-if ($process -and -not $process.HasExited) {
-    Write-Ok "Log generator started (PID: $($process.Id))"
-} else {
-    Write-Host "[WARN] Log generator may not have started. Check: $GENERATOR_LOG" -ForegroundColor Yellow
+if ($process.HasExited) {
+    Write-Warn "Log generator crashed on startup. Last 20 lines of generator log:"
+    Write-Host "---" -ForegroundColor Gray
+    if (Test-Path $GENERATOR_LOG) { Get-Content $GENERATOR_LOG -Tail 20 }
+    if (Test-Path "$LOGS_DIR\generator_error.log") { Get-Content "$LOGS_DIR\generator_error.log" -Tail 20 }
+    Write-Host "---" -ForegroundColor Gray
+    Write-Fail "Cannot continue - fix the generator and re-run bootstrap."
+}
+Write-Ok "Log generator running (PID: $($process.Id))"
+
+# ─────────────────────────────────────────
+# Step 7 — Smoke test: verify logs are flowing
+# ─────────────────────────────────────────
+Write-Step "[7/7] Verifying end-to-end log flow..."
+
+$smokeRetries = 10
+$smokeCount   = 0
+$logsFlowing  = $false
+
+while ($smokeCount -lt $smokeRetries) {
+    Start-Sleep -Seconds 3
+    $currentCount = Get-MessageCount
+
+    if ($currentCount -gt $baselineCount) {
+        $newMessages = $currentCount - $baselineCount
+        Write-Ok "Logs flowing: $newMessages new messages ingested (total: $currentCount)"
+        $logsFlowing = $true
+        break
+    }
+
+    $smokeCount++
+    Write-Host -NoNewline "."
+}
+Write-Host ""
+
+if (-not $logsFlowing) {
+    Write-Warn "No new messages detected after 30 seconds. Possible causes:"
+    Write-Host "       - Content pack inputs not started - check System -> Inputs in Graylog UI"
+    Write-Host "       - Log generator sending to wrong port - check: Get-Content $GENERATOR_LOG"
+    Write-Host "       - Firewall blocking localhost:1514 or localhost:12201"
+    Write-Host ""
+    Write-Host "       Last 10 lines of generator log:"
+    Write-Host "       ---" -ForegroundColor Gray
+    if (Test-Path $GENERATOR_LOG) { Get-Content $GENERATOR_LOG -Tail 10 | ForEach-Object { "       $_" } }
+    Write-Host "       ---" -ForegroundColor Gray
 }
 
 # ─────────────────────────────────────────
@@ -247,18 +363,21 @@ if ($process -and -not $process.HasExited) {
 # ─────────────────────────────────────────
 Write-Host ""
 Write-Host "=============================================================" -ForegroundColor Green
-Write-Host "   Bootstrap complete!" -ForegroundColor Green
+if ($logsFlowing) {
+    Write-Host "   Bootstrap complete - SIEM is fully operational!" -ForegroundColor Green
+} else {
+    Write-Host "   Bootstrap complete - but verify logs manually." -ForegroundColor Yellow
+}
 Write-Host "=============================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Graylog UI:    $GRAYLOG_URL"
 Write-Host "  Username:      admin"
-Write-Host "  Password:      (from your .env file)"
+Write-Host "  Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)"
 Write-Host ""
 Write-Host "  Log generator: running in background (PID: $($process.Id))"
 Write-Host "  Generator log: $GENERATOR_LOG"
 Write-Host ""
 Write-Host "  To generate a security report:"
-Write-Host "    `$env:GRAYLOG_PASS = 'your_password'"
 Write-Host "    python scripts\report_generator.py"
 Write-Host ""
 Write-Host "  To stop all containers:"

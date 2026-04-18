@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================
 # Catnip Games SIEM - Bootstrap Script
-# Supports: Mac, Linux, WSL (Windows Subsystem for Linux)
+# Supports: Mac, Linux, WSL (Windows Subsystem for Linux), Kali
 # Usage: ./bootstrap.sh
 # =============================================================
 
@@ -21,6 +21,17 @@ info() { echo -e "${YELLOW}[..] $1${NC}"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 fail() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
 step() { echo -e "\n${CYAN}$1${NC}"; }
+
+# Robust .env variable reader — handles CRLF, quotes, and whitespace
+read_env_var() {
+    local var_name="$1"
+    local env_file="${2:-.env}"
+    grep "^${var_name}=" "$env_file" 2>/dev/null | \
+        head -1 | \
+        cut -d'=' -f2- | \
+        tr -d '\r' | \
+        sed 's/^["'\'']//;s/["'\'']$//'
+}
 
 # ─────────────────────────────────────────
 # Config
@@ -105,7 +116,7 @@ else
 fi
 
 # ─────────────────────────────────────────
-# Step 4 — Check .env and load Graylog password
+# Step 4 — Check .env, auto-fix CRLF, load password
 # ─────────────────────────────────────────
 step "[4/7] Checking environment configuration..."
 
@@ -130,9 +141,15 @@ if [ ! -f ".env" ]; then
 fi
 ok ".env file found"
 
+# Auto-fix Windows CRLF line endings (silent — happens every run, harmless on Unix files)
+if grep -q $'\r' .env 2>/dev/null; then
+    sed -i 's/\r$//' .env
+    info "Normalised line endings in .env (Windows CRLF → Unix LF)"
+fi
+
 # Load plaintext admin password from .env (NOT the SHA2 hash)
 if [ -z "$GRAYLOG_PASS" ]; then
-    GRAYLOG_PASS=$(grep "^GRAYLOG_ADMIN_PASSWORD=" .env | cut -d'=' -f2- | tr -d '"'"'")
+    GRAYLOG_PASS=$(read_env_var "GRAYLOG_ADMIN_PASSWORD")
 fi
 
 if [ -z "$GRAYLOG_PASS" ]; then
@@ -166,7 +183,6 @@ COUNT=0
 READY=0
 
 while [ $COUNT -lt $RETRIES ]; do
-    # Hit the lbstatus endpoint — returns "ALIVE" when Graylog is ready
     RESPONSE=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
         "$GRAYLOG_URL/api/system/lbstatus" 2>/dev/null || echo "")
 
@@ -199,39 +215,41 @@ fi
 ok "Graylog authentication verified"
 
 # ─────────────────────────────────────────
-# Step 6 — Install content pack (idempotent)
+# Step 6 — Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
 step "[6/7] Installing Graylog content pack..."
 
-if [ ! -f "$CONTENT_PACK_FILE" ]; then
-    warn "Content pack not found at: $CONTENT_PACK_FILE"
-    echo "       You can import it manually: System → Content Packs → Upload"
-else
-    # Check if content pack already exists (idempotent)
-    info "Checking for existing content pack..."
-    EXISTING=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
+# Helper: find content pack ID by name (returns empty string if not found)
+find_pack_id_by_name() {
+    curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
         -H "X-Requested-By: bootstrap" \
-        "$GRAYLOG_URL/api/system/content_packs" 2>/dev/null)
-
-    EXISTING_PACK_ID=$(echo "$EXISTING" | python3 -c "
+        "$GRAYLOG_URL/api/system/content_packs" 2>/dev/null | \
+    python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    packs = data.get('content_packs', [])
-    for p in packs:
+    for p in data.get('content_packs', []):
         if p.get('name') == '$CONTENT_PACK_NAME':
             print(p.get('id', ''))
             break
 except Exception:
     pass
-" 2>/dev/null)
+" 2>/dev/null
+}
 
-    if [ -n "$EXISTING_PACK_ID" ]; then
-        ok "Content pack already exists (ID: $EXISTING_PACK_ID) — skipping upload"
-        PACK_ID="$EXISTING_PACK_ID"
+if [ ! -f "$CONTENT_PACK_FILE" ]; then
+    warn "Content pack not found at: $CONTENT_PACK_FILE"
+    echo "       Install manually: System → Content Packs → Upload"
+else
+    # Step 6a: Upload (skip if already uploaded)
+    info "Checking for existing content pack..."
+    PACK_ID=$(find_pack_id_by_name)
+
+    if [ -n "$PACK_ID" ]; then
+        ok "Content pack already uploaded (ID: $PACK_ID)"
     else
         info "Uploading content pack..."
-        UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+        UPLOAD_CODE=$(curl -s -o /tmp/catnip_upload_response.json -w "%{http_code}" \
             -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
             -H "X-Requested-By: bootstrap" \
             -H "Content-Type: application/json" \
@@ -239,25 +257,20 @@ except Exception:
             "$GRAYLOG_URL/api/system/content_packs" \
             -d @"$CONTENT_PACK_FILE" 2>/dev/null)
 
-        HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
-        RESPONSE_BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
-
-        if [[ "$HTTP_CODE" == "201" || "$HTTP_CODE" == "200" ]]; then
+        if [[ "$UPLOAD_CODE" == "201" || "$UPLOAD_CODE" == "200" ]]; then
             ok "Content pack uploaded"
-            PACK_ID=$(echo "$RESPONSE_BODY" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('id', d.get('content_pack_id', '')))
-except: pass
-" 2>/dev/null)
+            # Re-query by name to get the ID reliably (don't rely on upload response parsing)
+            sleep 1
+            PACK_ID=$(find_pack_id_by_name)
         else
-            warn "Upload returned HTTP $HTTP_CODE — install manually via System → Content Packs"
+            warn "Upload returned HTTP $UPLOAD_CODE"
+            echo "       Response: $(cat /tmp/catnip_upload_response.json 2>/dev/null | head -c 200)"
             PACK_ID=""
         fi
+        rm -f /tmp/catnip_upload_response.json
     fi
 
-    # Install the content pack (safe to re-run — Graylog will no-op if already installed)
+    # Step 6b: Install (always attempt — Graylog is idempotent on re-install)
     if [ -n "$PACK_ID" ]; then
         info "Installing content pack (ID: $PACK_ID)..."
         INSTALL_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -271,13 +284,26 @@ except: pass
         if [[ "$INSTALL_CODE" == "200" || "$INSTALL_CODE" == "201" ]]; then
             ok "Content pack installed — streams, alerts, dashboards, inputs, notifications restored"
         else
-            warn "Install returned HTTP $INSTALL_CODE — may already be installed. Verify in: System → Content Packs"
+            warn "Install returned HTTP $INSTALL_CODE — verify in: System → Content Packs"
         fi
+    else
+        warn "Could not resolve content pack ID — install manually via System → Content Packs"
     fi
 fi
 
 # Give inputs a moment to start listening
 sleep 3
+
+# Verify at least one input exists before starting the generator
+INPUT_COUNT=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
+    "$GRAYLOG_URL/api/system/inputs" 2>/dev/null | \
+    python3 -c "import sys, json; print(json.load(sys.stdin).get('total', 0))" 2>/dev/null || echo "0")
+
+if [ "$INPUT_COUNT" = "0" ]; then
+    warn "No Graylog inputs configured — logs will not be ingested until you add one."
+else
+    ok "$INPUT_COUNT Graylog input(s) configured"
+fi
 
 # ─────────────────────────────────────────
 # Step 7 — Start log generator and verify logs are flowing
@@ -297,11 +323,15 @@ mkdir -p "$LOGS_DIR"
 pkill -f "log_generator.py" 2>/dev/null || true
 sleep 1
 
-# Capture baseline message count so we can detect new logs arriving
-BASELINE_COUNT=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
-    "$GRAYLOG_URL/api/count/total" 2>/dev/null | \
-    python3 -c "import sys, json; print(json.load(sys.stdin).get('events', 0))" 2>/dev/null || echo "0")
+# Use universal search — works across Graylog versions
+get_message_count() {
+    curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
+        -H "Accept: application/json" \
+        "$GRAYLOG_URL/api/search/universal/relative?query=*&range=300&limit=1" 2>/dev/null | \
+    python3 -c "import sys, json; print(json.load(sys.stdin).get('total_results', 0))" 2>/dev/null || echo "0"
+}
 
+BASELINE_COUNT=$(get_message_count)
 info "Baseline message count: $BASELINE_COUNT"
 
 # Start the generator
@@ -321,7 +351,7 @@ if ! kill -0 "$GENERATOR_PID" 2>/dev/null; then
 fi
 ok "Log generator running (PID: $GENERATOR_PID)"
 
-# Smoke test — wait up to 30 seconds for new messages to arrive
+# Smoke test — wait up to 30 seconds for new messages
 info "Verifying logs are reaching Graylog..."
 SMOKE_RETRIES=10
 SMOKE_COUNT=0
@@ -329,11 +359,9 @@ LOGS_FLOWING=0
 
 while [ $SMOKE_COUNT -lt $SMOKE_RETRIES ]; do
     sleep 3
-    CURRENT_COUNT=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
-        "$GRAYLOG_URL/api/count/total" 2>/dev/null | \
-        python3 -c "import sys, json; print(json.load(sys.stdin).get('events', 0))" 2>/dev/null || echo "0")
+    CURRENT_COUNT=$(get_message_count)
 
-    if [ "$CURRENT_COUNT" -gt "$BASELINE_COUNT" ]; then
+    if [ "$CURRENT_COUNT" -gt "$BASELINE_COUNT" ] 2>/dev/null; then
         NEW_MESSAGES=$((CURRENT_COUNT - BASELINE_COUNT))
         ok "Logs flowing: $NEW_MESSAGES new messages ingested (total: $CURRENT_COUNT)"
         LOGS_FLOWING=1

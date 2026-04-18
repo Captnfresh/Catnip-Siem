@@ -2,8 +2,7 @@
 REM =============================================================
 REM Catnip Games SIEM - Bootstrap Script (Windows CMD)
 REM Supports: Windows Command Prompt with Docker Desktop
-REM Usage: Double-click bootstrap.bat
-REM        OR in CMD: bootstrap.bat
+REM Usage: Double-click bootstrap.bat  OR  in CMD: bootstrap.bat
 REM =============================================================
 
 setlocal EnableDelayedExpansion
@@ -18,14 +17,13 @@ echo.
 REM ─────────────────────────────────────────
 REM Step 1 - Check dependencies
 REM ─────────────────────────────────────────
-echo [1/6] Checking dependencies...
+echo [1/7] Checking dependencies...
 echo.
 
 docker --version >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Docker not found.
     echo         Please install Docker Desktop from https://docker.com
-    echo         Then start Docker Desktop and wait for Engine Running.
     pause
     exit /b 1
 )
@@ -52,24 +50,23 @@ REM ─────────────────────────�
 REM Step 2 - Check Docker is running
 REM ─────────────────────────────────────────
 echo.
-echo [2/6] Checking Docker Desktop is running...
+echo [2/7] Checking Docker Desktop is running...
 echo.
 
 docker ps >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Docker Desktop is not running or not ready.
-    echo         Please start Docker Desktop and wait for "Engine running"
-    echo         at the bottom left before running this script.
+    echo [ERROR] Docker Desktop is not running.
+    echo         Please start Docker Desktop and wait for "Engine running".
     pause
     exit /b 1
 )
 echo [OK] Docker Desktop is running
 
 REM ─────────────────────────────────────────
-REM Step 3 - Check .env exists
+REM Step 3 - Check .env and load password
 REM ─────────────────────────────────────────
 echo.
-echo [3/6] Checking environment configuration...
+echo [3/7] Checking environment configuration...
 echo.
 
 if not exist ".env" (
@@ -79,42 +76,58 @@ if not exist ".env" (
     echo     copy .env.example .env
     echo.
     echo   Then fill in the values shared with your team via WhatsApp.
+    echo   Required:
+    echo     GRAYLOG_PASSWORD_SECRET
+    echo     GRAYLOG_ROOT_PASSWORD_SHA2
+    echo     GRAYLOG_ADMIN_PASSWORD   (plaintext, for API calls)
+    echo     OPENSEARCH_ADMIN_PASSWORD
+    echo     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
     echo.
     pause
     exit /b 1
 )
 echo [OK] .env file found
 
-REM Get password for API calls
+REM Load GRAYLOG_ADMIN_PASSWORD from .env — strip whitespace and CR (trailing \r from CRLF)
+if "%GRAYLOG_PASS%"=="" (
+    for /f "tokens=*" %%i in ('python -c "import re; [print(l.split('=',1)[1].rstrip()) for l in open('.env') if re.match(r'^GRAYLOG_ADMIN_PASSWORD=', l)]" 2^>nul') do set "GRAYLOG_PASS=%%i"
+)
+
 if "%GRAYLOG_PASS%"=="" (
     echo.
-    set /p GRAYLOG_PASS="Enter your Graylog admin password (for API calls): "
+    echo [ERROR] GRAYLOG_ADMIN_PASSWORD not set in .env
     echo.
+    echo   Add this line to your .env file:
+    echo     GRAYLOG_ADMIN_PASSWORD=the plaintext admin password
+    echo.
+    echo   This is the plaintext whose SHA256 hash is stored in
+    echo   GRAYLOG_ROOT_PASSWORD_SHA2.
+    echo.
+    pause
+    exit /b 1
 )
+echo [OK] Graylog admin credentials loaded from .env
 
 REM ─────────────────────────────────────────
 REM Step 4 - Start Docker stack
 REM ─────────────────────────────────────────
 echo.
-echo [4/6] Starting Docker containers...
+echo [4/7] Starting Docker containers...
 echo.
 
 docker compose up -d
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] docker compose up failed.
-    echo         Check your .env file and try again.
     pause
     exit /b 1
 )
 
 echo.
-echo [..] Waiting for Graylog to become healthy...
-echo      This takes 1-2 minutes. Please wait.
+echo [..] Waiting for Graylog to become ready (1-2 minutes)...
 echo.
 
 set RETRIES=60
 set COUNT=0
-set HEALTHY=0
 
 :WAIT_LOOP
 if %COUNT% geq %RETRIES% goto TIMEOUT
@@ -122,33 +135,45 @@ set /a COUNT+=1
 <nul set /p ".=."
 timeout /t 3 /nobreak >nul 2>&1
 
-curl -s -u "admin:%GRAYLOG_PASS%" -H "Accept: application/json" ^
+curl -s -u "admin:%GRAYLOG_PASS%" ^
     http://localhost:9000/api/system/lbstatus 2>nul | find "ALIVE" >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    set HEALTHY=1
-    goto HEALTHY_CHECK
-)
+if %ERRORLEVEL% equ 0 goto READY
 goto WAIT_LOOP
 
 :TIMEOUT
 echo.
-echo [ERROR] Graylog did not become healthy in time.
+echo [ERROR] Graylog did not become ready in time.
 echo         Run: docker compose logs graylog
 pause
 exit /b 1
 
-:HEALTHY_CHECK
+:READY
 echo.
-echo [OK] Graylog is healthy
+echo [OK] Graylog is ready
+
+REM Verify auth works
+curl -s -o nul -w "%%{http_code}" -u "admin:%GRAYLOG_PASS%" ^
+    http://localhost:9000/api/users > temp_auth.txt 2>nul
+set /p AUTH_CODE=<temp_auth.txt
+del temp_auth.txt 2>nul
+if not "%AUTH_CODE%"=="200" (
+    echo [ERROR] Graylog authentication failed ^(HTTP %AUTH_CODE%^).
+    echo         Check GRAYLOG_ADMIN_PASSWORD matches the password used
+    echo         to generate GRAYLOG_ROOT_PASSWORD_SHA2.
+    pause
+    exit /b 1
+)
+echo [OK] Graylog authentication verified
 
 REM ─────────────────────────────────────────
 REM Step 5 - Install content pack
 REM ─────────────────────────────────────────
 echo.
-echo [5/6] Installing Graylog content pack...
+echo [5/7] Installing Graylog content pack...
 echo.
 
 set CONTENT_PACK=content-packs\catnip-siem-pack.json
+set CONTENT_PACK_NAME=Catnip Games SIEM
 
 if not exist "%CONTENT_PACK%" (
     echo [SKIP] Content pack not found at: %CONTENT_PACK%
@@ -156,34 +181,88 @@ if not exist "%CONTENT_PACK%" (
     goto SKIP_CONTENT_PACK
 )
 
-echo [..] Uploading content pack...
+REM Step 5a: Check if already uploaded
+echo [..] Checking for existing content pack...
+curl -s -u "admin:%GRAYLOG_PASS%" -H "X-Requested-By: bootstrap" ^
+    http://localhost:9000/api/system/content_packs > temp_packs.json 2>nul
+for /f "tokens=*" %%i in ('python -c "import json; packs=json.load(open('temp_packs.json'))['content_packs']; print(next((p['id'] for p in packs if p.get('name')=='%CONTENT_PACK_NAME%'), ''))" 2^>nul') do set PACK_ID=%%i
+del temp_packs.json 2>nul
 
-for /f "tokens=*" %%r in ('curl -s -w "%%{http_code}" ^
+if not "%PACK_ID%"=="" (
+    echo [OK] Content pack already uploaded ^(ID: %PACK_ID%^)
+    goto INSTALL_PACK
+)
+
+REM Step 5b: Upload if not present
+echo [..] Uploading content pack...
+curl -s -o nul -w "%%{http_code}" ^
     -u "admin:%GRAYLOG_PASS%" ^
     -H "X-Requested-By: bootstrap" ^
     -H "Content-Type: application/json" ^
     -X POST ^
     http://localhost:9000/api/system/content_packs ^
-    -d @"%CONTENT_PACK%" 2^>nul') do set UPLOAD_RESULT=%%r
+    -d @"%CONTENT_PACK%" > temp_http.txt 2>nul
+set /p UPLOAD_CODE=<temp_http.txt
+del temp_http.txt 2>nul
 
-echo %UPLOAD_RESULT% | find "400" >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    echo [SKIP] Content pack already exists in Graylog
+if not "%UPLOAD_CODE%"=="200" if not "%UPLOAD_CODE%"=="201" (
+    echo [WARN] Upload returned HTTP %UPLOAD_CODE% - install manually
+    goto SKIP_CONTENT_PACK
+)
+echo [OK] Content pack uploaded
+
+REM Re-query by name to get reliable ID
+timeout /t 1 /nobreak >nul 2>&1
+curl -s -u "admin:%GRAYLOG_PASS%" -H "X-Requested-By: bootstrap" ^
+    http://localhost:9000/api/system/content_packs > temp_packs.json 2>nul
+for /f "tokens=*" %%i in ('python -c "import json; packs=json.load(open('temp_packs.json'))['content_packs']; print(next((p['id'] for p in packs if p.get('name')=='%CONTENT_PACK_NAME%'), ''))" 2^>nul') do set PACK_ID=%%i
+del temp_packs.json 2>nul
+
+if "%PACK_ID%"=="" (
+    echo [WARN] Could not resolve content pack ID - install manually
     goto SKIP_CONTENT_PACK
 )
 
-echo [OK] Content pack uploaded
-echo [..] Installing content pack...
-echo      Note: Copy the content pack ID from Graylog UI if needed
-echo      System -^> Content Packs -^> find Catnip Games SIEM -^> Install
+:INSTALL_PACK
+echo [..] Installing content pack ^(ID: %PACK_ID%^)...
+curl -s -o nul -w "%%{http_code}" ^
+    -u "admin:%GRAYLOG_PASS%" ^
+    -H "X-Requested-By: bootstrap" ^
+    -H "Content-Type: application/json" ^
+    -X POST ^
+    http://localhost:9000/api/system/content_packs/%PACK_ID%/1/installations ^
+    -d "{\"parameters\":{},\"comment\":\"Installed by bootstrap\"}" > temp_install.txt 2>nul
+set /p INSTALL_CODE=<temp_install.txt
+del temp_install.txt 2>nul
+
+if "%INSTALL_CODE%"=="200" (
+    echo [OK] Content pack installed - streams, alerts, dashboards, inputs, notifications restored
+) else if "%INSTALL_CODE%"=="201" (
+    echo [OK] Content pack installed - streams, alerts, dashboards, inputs, notifications restored
+) else (
+    echo [WARN] Install returned HTTP %INSTALL_CODE% - verify in System -^> Content Packs
+)
 
 :SKIP_CONTENT_PACK
+
+REM Give inputs a moment to start
+timeout /t 3 /nobreak >nul 2>&1
+
+REM Verify at least one input exists
+curl -s -u "admin:%GRAYLOG_PASS%" http://localhost:9000/api/system/inputs > temp_inputs.json 2>nul
+for /f "tokens=*" %%i in ('python -c "import json; print(json.load(open('temp_inputs.json')).get('total',0))" 2^>nul') do set INPUT_COUNT=%%i
+del temp_inputs.json 2>nul
+if "%INPUT_COUNT%"=="0" (
+    echo [WARN] No Graylog inputs configured - logs will not be ingested.
+) else (
+    echo [OK] %INPUT_COUNT% Graylog input^(s^) configured
+)
 
 REM ─────────────────────────────────────────
 REM Step 6 - Install Python deps + start generator
 REM ─────────────────────────────────────────
 echo.
-echo [6/6] Installing Python dependencies and starting log generator...
+echo [6/7] Installing Python dependencies and starting log generator...
 echo.
 
 python -m pip install requests --quiet >nul 2>&1
@@ -191,28 +270,87 @@ echo [OK] Python requests library installed
 
 if not exist "logs" mkdir logs
 
+REM Capture baseline via universal search (works across Graylog versions)
+curl -s -u "admin:%GRAYLOG_PASS%" -H "Accept: application/json" ^
+    "http://localhost:9000/api/search/universal/relative?query=*&range=300&limit=1" > temp_count.json 2>nul
+for /f "tokens=*" %%i in ('python -c "import json; print(json.load(open('temp_count.json')).get('total_results',0))" 2^>nul') do set BASELINE=%%i
+del temp_count.json 2>nul
+if "%BASELINE%"=="" set BASELINE=0
+echo [..] Baseline message count: %BASELINE%
+
 echo [..] Starting log generator in background...
 start /B python scripts\log_generator.py > logs\generator.log 2>&1
-timeout /t 2 /nobreak >nul 2>&1
+timeout /t 3 /nobreak >nul 2>&1
 echo [OK] Log generator started
+
+REM ─────────────────────────────────────────
+REM Step 7 - Smoke test
+REM ─────────────────────────────────────────
+echo.
+echo [7/7] Verifying end-to-end log flow...
+echo.
+
+set SMOKE_RETRIES=10
+set SMOKE_COUNT=0
+set LOGS_FLOWING=0
+
+:SMOKE_LOOP
+if %SMOKE_COUNT% geq %SMOKE_RETRIES% goto SMOKE_DONE
+set /a SMOKE_COUNT+=1
+timeout /t 3 /nobreak >nul 2>&1
+
+curl -s -u "admin:%GRAYLOG_PASS%" -H "Accept: application/json" ^
+    "http://localhost:9000/api/search/universal/relative?query=*&range=300&limit=1" > temp_count.json 2>nul
+for /f "tokens=*" %%i in ('python -c "import json; print(json.load(open('temp_count.json')).get('total_results',0))" 2^>nul') do set CURRENT=%%i
+del temp_count.json 2>nul
+if "%CURRENT%"=="" set CURRENT=0
+
+if %CURRENT% gtr %BASELINE% (
+    set /a NEW_MSGS=%CURRENT%-%BASELINE%
+    echo [OK] Logs flowing: !NEW_MSGS! new messages ingested ^(total: %CURRENT%^)
+    set LOGS_FLOWING=1
+    goto SMOKE_DONE
+)
+
+<nul set /p ".=."
+goto SMOKE_LOOP
+
+:SMOKE_DONE
+echo.
+
+if %LOGS_FLOWING% equ 0 (
+    echo [WARN] No new messages detected after 30 seconds.
+    echo        Possible causes:
+    echo          - Content pack inputs not started - check System -^> Inputs in Graylog UI
+    echo          - Log generator sending to wrong port - check logs\generator.log
+    echo          - Firewall blocking localhost:1514 or localhost:12201
+    echo.
+    echo        Last 10 lines of generator log:
+    echo        ---
+    powershell -Command "Get-Content logs\generator.log -Tail 10" 2>nul
+    echo        ---
+)
 
 REM ─────────────────────────────────────────
 REM Done
 REM ─────────────────────────────────────────
 echo.
 echo =============================================================
-echo    Bootstrap complete!
+if %LOGS_FLOWING% equ 1 (
+    echo    Bootstrap complete - SIEM is fully operational!
+) else (
+    echo    Bootstrap complete - but verify logs manually.
+)
 echo =============================================================
 echo.
-echo   Graylog UI:   http://localhost:9000
-echo   Username:     admin
-echo   Password:     (from your .env file)
+echo   Graylog UI:    http://localhost:9000
+echo   Username:      admin
+echo   Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)
 echo.
-echo   Log generator is running in the background
+echo   Log generator: running in background
 echo   Generator log: logs\generator.log
 echo.
 echo   To generate a security report:
-echo     set GRAYLOG_PASS=your_password
 echo     python scripts\report_generator.py
 echo.
 echo   To stop all containers:
