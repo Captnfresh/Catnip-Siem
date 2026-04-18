@@ -753,5 +753,1456 @@
       }
     ],
     "query": ""
-  }
+  },
+  "dashboard_definitions": [
+    {
+      "id": "69df3b41d23c565d4829f888",
+      "type": "DASHBOARD",
+      "title": "Security Overview",
+      "summary": "High level security summary across all Catnip Games infrastructure",
+      "description": "Shows total events, event timeline, event type breakdown, and critical event count over 24 hours",
+      "search_id": "69dfaa8cdb949240c40cf840",
+      "properties": [],
+      "requires": {},
+      "state": {
+        "5931ac67-2eed-41d6-89dd-95a40b303e41": {
+          "selected_fields": null,
+          "static_message_list_id": null,
+          "titles": {
+            "tab": {
+              "title": "Security Overview"
+            },
+            "widget": {
+              "ae322964-5405-4b0b-950b-9bdbc7207ce7": "Overview Of Total Logs Events",
+              "2b262279-4389-4e40-b054-0d1b224161a2": "Overview of Events Volume Timeline",
+              "8bb1e1e4-ecac-40b1-949a-2d126bf40812": "Overview Of  Log Sources Breakdown",
+              "53b4d406-2fe0-4059-889b-eb146112bf4d": "Overview Of Critical Events"
+            }
+          },
+          "widgets": [
+            {
+              "id": "8bb1e1e4-ecac-40b1-949a-2d126bf40812",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "event_type"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "pie",
+                "visualization_config": null,
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "ae322964-5405-4b0b-950b-9bdbc7207ce7",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": "Message Count"
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "numeric",
+                "visualization_config": {
+                  "trend": true,
+                  "trend_preference": "LOWER"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "2b262279-4389-4e40-b054-0d1b224161a2",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "line",
+                "visualization_config": {
+                  "interpolation": "linear",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "53b4d406-2fe0-4059-889b-eb146112bf4d",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "severity:critical"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": "Message Count"
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "numeric",
+                "visualization_config": {
+                  "trend": true,
+                  "trend_preference": "LOWER"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            }
+          ],
+          "widget_mapping": {
+            "53b4d406-2fe0-4059-889b-eb146112bf4d": [
+              "15a381b1-bdd7-498a-ab9b-07a805b1bb36",
+              "96471b13-9b9b-4883-943c-41829f89d5b7"
+            ],
+            "2b262279-4389-4e40-b054-0d1b224161a2": [
+              "980ed0e0-2f74-4bc6-bacb-8fc568f3e685"
+            ],
+            "8bb1e1e4-ecac-40b1-949a-2d126bf40812": [
+              "8e48f2b5-9762-48ac-9296-e78cd8503870"
+            ],
+            "ae322964-5405-4b0b-950b-9bdbc7207ce7": [
+              "92c775e5-3005-41af-8a6c-8b25ec73375a",
+              "a6c6d30a-823a-48e9-9d23-a3cae2cbe05b"
+            ]
+          },
+          "positions": {
+            "53b4d406-2fe0-4059-889b-eb146112bf4d": {
+              "col": 1,
+              "row": 1,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "2b262279-4389-4e40-b054-0d1b224161a2": {
+              "col": 1,
+              "row": 10,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "8bb1e1e4-ecac-40b1-949a-2d126bf40812": {
+              "col": 1,
+              "row": 5,
+              "height": 5,
+              "width": "Infinity"
+            },
+            "ae322964-5405-4b0b-950b-9bdbc7207ce7": {
+              "col": 1,
+              "row": 14,
+              "height": 4,
+              "width": "Infinity"
+            }
+          },
+          "formatting": {
+            "highlighting": []
+          },
+          "display_mode_settings": {
+            "positions": {}
+          }
+        }
+      },
+      "owner": "admin",
+      "created_at": "2026-04-15T06:40:45.495Z",
+      "last_updated_at": "2026-04-15T15:11:17.667Z",
+      "favorite": false
+    },
+    {
+      "id": "69df4bfc07a7433e1a33ee9c",
+      "type": "DASHBOARD",
+      "title": "SSH Monitoring",
+      "summary": "SSH authentication activity, brute force detection, and attacker analysis",
+      "description": "Real SSH authentication logs from WSL machine. Shows failed logins over time, top attacking IPs, most targeted usernames, and success vs failure ratio.",
+      "search_id": "69df951455be79843bac90f8",
+      "properties": [],
+      "requires": {},
+      "state": {
+        "f88a0d6f-7f2c-4b8e-89c4-f7746d9cc46d": {
+          "selected_fields": null,
+          "static_message_list_id": null,
+          "titles": {
+            "widget": {
+              "be7ca14a-def8-4b3c-8a47-35c4aef16744": "Failed SSH Logins Over Time",
+              "40280c6d-c3f1-4a96-8749-7654b25858b4": "Top Attacking IPs",
+              "4a2ab69f-12da-40b2-b10a-f7195963e8e6": "Most Targeted Username",
+              "2e154859-18db-433b-b296-27e9890577f8": "SSH Login Outcomes: Success vs Failed"
+            },
+            "tab": {
+              "title": "SSH Monitoring"
+            }
+          },
+          "widgets": [
+            {
+              "id": "4a2ab69f-12da-40b2-b10a-f7195963e8e6",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:sshd AND action:failed"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "username"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 10
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [
+                  {
+                    "type": "pivot",
+                    "field": "username",
+                    "direction": "Descending"
+                  }
+                ],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 10,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "2e154859-18db-433b-b296-27e9890577f8",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:sshd"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [
+                  {
+                    "fields": [
+                      "action"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "stack",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": 15
+              }
+            },
+            {
+              "id": "40280c6d-c3f1-4a96-8749-7654b25858b4",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:sshd AND action:failed"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "source_ip"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "be7ca14a-def8-4b3c-8a47-35c4aef16744",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:sshd AND action:Failed"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "line",
+                "visualization_config": {
+                  "interpolation": "linear",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            }
+          ],
+          "widget_mapping": {
+            "4a2ab69f-12da-40b2-b10a-f7195963e8e6": [
+              "2ad527dc-8944-4778-bf1a-1c9ce6d61c15"
+            ],
+            "2e154859-18db-433b-b296-27e9890577f8": [
+              "6389d8ef-b80b-480c-9ee7-0cacc585a7f4"
+            ],
+            "be7ca14a-def8-4b3c-8a47-35c4aef16744": [
+              "9b3e6170-1711-40ab-a6c4-250e0e8ccfd0"
+            ],
+            "40280c6d-c3f1-4a96-8749-7654b25858b4": [
+              "43e45659-ff2b-4a5f-be2b-82e5eca2433c"
+            ]
+          },
+          "positions": {
+            "be7ca14a-def8-4b3c-8a47-35c4aef16744": {
+              "col": 1,
+              "row": 13,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "4a2ab69f-12da-40b2-b10a-f7195963e8e6": {
+              "col": 1,
+              "row": 5,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "40280c6d-c3f1-4a96-8749-7654b25858b4": {
+              "col": 1,
+              "row": 9,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "2e154859-18db-433b-b296-27e9890577f8": {
+              "col": 1,
+              "row": 1,
+              "height": 4,
+              "width": "Infinity"
+            }
+          },
+          "formatting": {
+            "highlighting": []
+          },
+          "display_mode_settings": {
+            "positions": {}
+          }
+        }
+      },
+      "owner": "admin",
+      "created_at": "2026-04-15T08:22:19.481Z",
+      "last_updated_at": "2026-04-15T13:40:53.727Z",
+      "favorite": false
+    },
+    {
+      "id": "69df4b5407a7433e1a33ee9b",
+      "type": "DASHBOARD",
+      "title": "Game Server Health",
+      "summary": "Game server traffic monitoring, DDoS detection, and server health analysis",
+      "description": "Monitors traffic levels across Catnip game servers. Shows normal vs attack traffic, DDoS events, affected servers, and traffic volume over time.",
+      "search_id": "69df9e505413c6e6fbcff899",
+      "properties": [],
+      "requires": {},
+      "state": {
+        "f88a0d6f-7f2c-4b8e-89c4-f7746d9cc46d": {
+          "selected_fields": null,
+          "static_message_list_id": null,
+          "titles": {
+            "widget": {
+              "be7ca14a-def8-4b3c-8a47-35c4aef16744": "Failed SSH Logins Over Time",
+              "cd97a5d5-d8b5-4aca-a295-aa18f301d0a0": "DDoS Attacks Over Time",
+              "ac7e5b71-fe7c-424a-aeaa-1cc0d36dd847": "Top Targeted Game Servers",
+              "c8f96d4e-4536-4eff-b7cc-d29adf11fa5a": "Traffic Volume Over Time",
+              "244f375b-96a5-410d-89a5-66b62acefe8a": "Normal vs DDoS Traffic"
+            },
+            "tab": {
+              "title": "Game Server Health"
+            }
+          },
+          "widgets": [
+            {
+              "id": "cd97a5d5-d8b5-4aca-a295-aa18f301d0a0",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:game_traffic AND action:ddos_detected"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "ac7e5b71-fe7c-424a-aeaa-1cc0d36dd847",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:game_traffic AND action:ddos_detected"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "server_id"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "pie",
+                "visualization_config": null,
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "c8f96d4e-4536-4eff-b7cc-d29adf11fa5a",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:game_traffic"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "244f375b-96a5-410d-89a5-66b62acefe8a",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:game_traffic"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [
+                  {
+                    "fields": [
+                      "action"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "stack",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": 15
+              }
+            }
+          ],
+          "widget_mapping": {
+            "cd97a5d5-d8b5-4aca-a295-aa18f301d0a0": [
+              "033b0355-764f-4299-800b-2475dc06a0e7"
+            ],
+            "ac7e5b71-fe7c-424a-aeaa-1cc0d36dd847": [
+              "b4ffee01-6560-4eac-8a21-19fff195e71c"
+            ],
+            "c8f96d4e-4536-4eff-b7cc-d29adf11fa5a": [
+              "7f40cd74-40ba-4c30-9f9a-d9b677e48187"
+            ],
+            "244f375b-96a5-410d-89a5-66b62acefe8a": [
+              "67f88f35-ef9d-490c-8782-f7b5b88b6c0e"
+            ]
+          },
+          "positions": {
+            "cd97a5d5-d8b5-4aca-a295-aa18f301d0a0": {
+              "col": 1,
+              "row": 13,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "ac7e5b71-fe7c-424a-aeaa-1cc0d36dd847": {
+              "col": 1,
+              "row": 9,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "c8f96d4e-4536-4eff-b7cc-d29adf11fa5a": {
+              "col": 1,
+              "row": 5,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "244f375b-96a5-410d-89a5-66b62acefe8a": {
+              "col": 1,
+              "row": 1,
+              "height": 4,
+              "width": "Infinity"
+            }
+          },
+          "formatting": {
+            "highlighting": []
+          },
+          "display_mode_settings": {
+            "positions": {}
+          }
+        }
+      },
+      "owner": "admin",
+      "created_at": "2026-04-15T08:22:19.481Z",
+      "last_updated_at": "2026-04-15T14:19:25.688Z",
+      "favorite": false
+    },
+    {
+      "id": "69df9ef33338a9a6b1dadfc3",
+      "type": "DASHBOARD",
+      "title": "Player Auth Monitoring",
+      "summary": "Player login success and failure tracking, credential stuffing detection",
+      "description": "Monitors player authentication events across game servers. Shows login success rates, failed attempts, credential stuffing attacks, and top targeted players",
+      "search_id": "69dfa2b43338a9a6b1dadfd4",
+      "properties": [],
+      "requires": {},
+      "state": {
+        "127ecfaf-fc05-4d06-aa76-5cd956ee6c7d": {
+          "selected_fields": null,
+          "static_message_list_id": null,
+          "titles": {
+            "widget": {
+              "9c00d65f-e00e-4ef8-833f-a80449037158": "Player Login Outcome Over Time",
+              "23efab64-356f-45fc-a54c-c923cbc47cf2": "Top Targeted Players",
+              "47099b03-c045-4e2f-a597-27667daebeb0": "Credential Stuffing Attacks Over Time",
+              "0cd292a2-dffc-4531-8b91-9b2ab7735e36": "Top Attacker IP"
+            },
+            "tab": {
+              "title": "Players Auth Monitoring"
+            }
+          },
+          "widgets": [
+            {
+              "id": "23efab64-356f-45fc-a54c-c923cbc47cf2",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:player_auth AND action:login_failed"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "username"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "pie",
+                "visualization_config": null,
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "9c00d65f-e00e-4ef8-833f-a80449037158",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:player_auth"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [
+                  {
+                    "fields": [
+                      "action"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "stack",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": 15
+              }
+            },
+            {
+              "id": "47099b03-c045-4e2f-a597-27667daebeb0",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:player_auth AND action:credential_stuffing"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "0cd292a2-dffc-4531-8b91-9b2ab7735e36",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:player_auth AND action:login_failed"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "source_ip"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "group",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            }
+          ],
+          "widget_mapping": {
+            "9c00d65f-e00e-4ef8-833f-a80449037158": [
+              "9421f3e7-bc9a-4623-9772-08c590a6be17"
+            ],
+            "23efab64-356f-45fc-a54c-c923cbc47cf2": [
+              "66600435-b467-4262-a0d6-fd7e46751ddb"
+            ],
+            "47099b03-c045-4e2f-a597-27667daebeb0": [
+              "49504bc3-0ac1-477a-8cf9-87fa78d305ea"
+            ],
+            "0cd292a2-dffc-4531-8b91-9b2ab7735e36": [
+              "8ec31ca3-5f21-4a02-abc1-3f7d75c5ae68"
+            ]
+          },
+          "positions": {
+            "9c00d65f-e00e-4ef8-833f-a80449037158": {
+              "col": 1,
+              "row": 13,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "23efab64-356f-45fc-a54c-c923cbc47cf2": {
+              "col": 1,
+              "row": 9,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "47099b03-c045-4e2f-a597-27667daebeb0": {
+              "col": 1,
+              "row": 5,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "0cd292a2-dffc-4531-8b91-9b2ab7735e36": {
+              "col": 1,
+              "row": 1,
+              "height": 4,
+              "width": "Infinity"
+            }
+          },
+          "formatting": {
+            "highlighting": []
+          },
+          "display_mode_settings": {
+            "positions": {}
+          }
+        }
+      },
+      "owner": "admin",
+      "created_at": "2026-04-15T14:21:21.081Z",
+      "last_updated_at": "2026-04-15T14:37:50.704Z",
+      "favorite": false
+    },
+    {
+      "id": "69dfa3368a65ad2041369ef7",
+      "type": "DASHBOARD",
+      "title": "Dev Environment Security",
+      "summary": "Developer SSH activity monitoring and suspicious access detection",
+      "description": "Monitors SSH activity across Catnip dev servers. Shows normal vs suspicious logins, top targeted dev accounts, and suspicious access patterns.",
+      "search_id": "69dfa9b38a65ad2041369f08",
+      "properties": [],
+      "requires": {},
+      "state": {
+        "3ac20366-5f0a-4bca-8df7-38e106d5b26c": {
+          "selected_fields": null,
+          "static_message_list_id": null,
+          "titles": {
+            "widget": {
+              "99c67fbb-9f9c-4ad6-932d-9416379c9701": "Dev SSH Activity Over Time",
+              "fd9d84b5-1df4-43c2-93a1-3674e7b0828e": "Suspicious vs Normal Dev Logins",
+              "07822ebf-e4b0-45dc-821b-803daad11cae": "Top Targeted Dev Accounts",
+              "b3cfd56b-d14f-404e-8200-6d636150e109": "Top Suspicious Source IPs"
+            },
+            "tab": {
+              "title": "Dev Environment Monitoring"
+            }
+          },
+          "widgets": [
+            {
+              "id": "99c67fbb-9f9c-4ad6-932d-9416379c9701",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [
+                  {
+                    "fields": [
+                      "action"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "stack",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": 15
+              }
+            },
+            {
+              "id": "b3cfd56b-d14f-404e-8200-6d636150e109",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": " event_type:dev_ssh AND action:suspicious_login"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "source_ip"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "pie",
+                "visualization_config": null,
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            },
+            {
+              "id": "fd9d84b5-1df4-43c2-93a1-3674e7b0828e",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:dev_ssh"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "timestamp"
+                    ],
+                    "type": "time",
+                    "config": {
+                      "interval": {
+                        "type": "auto",
+                        "scaling": 1.0
+                      }
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [
+                  {
+                    "fields": [
+                      "action"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "bar",
+                "visualization_config": {
+                  "barmode": "stack",
+                  "axis_type": "linear"
+                },
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": null,
+                "column_limit": 15
+              }
+            },
+            {
+              "id": "07822ebf-e4b0-45dc-821b-803daad11cae",
+              "type": "aggregation",
+              "filter": null,
+              "filters": [],
+              "timerange": {
+                "from": 86400,
+                "type": "relative"
+              },
+              "query": {
+                "type": "elasticsearch",
+                "query_string": "event_type:dev_ssh AND action:suspicious_login"
+              },
+              "streams": [],
+              "stream_categories": [],
+              "config": {
+                "row_pivots": [
+                  {
+                    "fields": [
+                      "username"
+                    ],
+                    "type": "values",
+                    "config": {
+                      "limit": 15
+                    }
+                  }
+                ],
+                "units": {},
+                "column_pivots": [],
+                "series": [
+                  {
+                    "config": {
+                      "name": null
+                    },
+                    "function": "count()"
+                  }
+                ],
+                "sort": [],
+                "visualization": "pie",
+                "visualization_config": null,
+                "formatting_settings": null,
+                "rollup": false,
+                "event_annotation": false,
+                "row_limit": 15,
+                "column_limit": null
+              }
+            }
+          ],
+          "widget_mapping": {
+            "99c67fbb-9f9c-4ad6-932d-9416379c9701": [
+              "99a0fab5-39e8-4bb8-9b75-68ec128a9633"
+            ],
+            "fd9d84b5-1df4-43c2-93a1-3674e7b0828e": [
+              "62cbc792-1a4a-41c1-8bfa-0b5d7371031e"
+            ],
+            "07822ebf-e4b0-45dc-821b-803daad11cae": [
+              "3eabbb01-bb30-456c-bcad-f3456ad1c80c"
+            ],
+            "b3cfd56b-d14f-404e-8200-6d636150e109": [
+              "ce33de24-2d7b-41f7-bf91-541de54844e3"
+            ]
+          },
+          "positions": {
+            "99c67fbb-9f9c-4ad6-932d-9416379c9701": {
+              "col": 1,
+              "row": 13,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "fd9d84b5-1df4-43c2-93a1-3674e7b0828e": {
+              "col": 1,
+              "row": 9,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "07822ebf-e4b0-45dc-821b-803daad11cae": {
+              "col": 1,
+              "row": 5,
+              "height": 4,
+              "width": "Infinity"
+            },
+            "b3cfd56b-d14f-404e-8200-6d636150e109": {
+              "col": 1,
+              "row": 1,
+              "height": 4,
+              "width": "Infinity"
+            }
+          },
+          "formatting": {
+            "highlighting": []
+          },
+          "display_mode_settings": {
+            "positions": {}
+          }
+        }
+      },
+      "owner": "admin",
+      "created_at": "2026-04-15T14:39:46.283Z",
+      "last_updated_at": "2026-04-15T15:08:36.214Z",
+      "favorite": false
+    }
+  ]
 }
