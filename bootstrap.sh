@@ -340,6 +340,22 @@ nohup python3 "$SCRIPTS_DIR/log_generator.py" > "$GENERATOR_LOG" 2>&1 &
 GENERATOR_PID=$!
 sleep 3
 
+
+# Start geomap
+info "Starting live attack map in background..."
+pip3 install flask --break-system-packages --quiet 2>/dev/null || true
+pkill -f "geomap.py" 2>/dev/null || true
+sleep 1
+nohup python3 "$(dirname "$0")/geomap/geomap.py" > "$(dirname "$0")/logs/geomap.log" 2>&1 &
+GEOMAP_PID=$!
+sleep 2
+if kill -0 "$GEOMAP_PID" 2>/dev/null; then
+    ok "Live attack map started — http://localhost:8888"
+else
+    echo -e "${YELLOW}[WARN] Geomap may not have started. Check: logs/geomap.log${NC}"
+fi
+
+
 # Check generator survived startup
 if ! kill -0 "$GENERATOR_PID" 2>/dev/null; then
     echo ""
@@ -400,6 +416,7 @@ echo ""
 echo "  Graylog UI:      $GRAYLOG_URL"
 echo "  Username:        admin"
 echo "  Password:        (from GRAYLOG_ADMIN_PASSWORD in .env)"
+echo "  Attack Map:      http://localhost:8888"
 echo ""
 echo "  Log generator:   running in background (PID: $GENERATOR_PID)"
 echo "  Generator logs:  $GENERATOR_LOG"
@@ -409,6 +426,9 @@ echo "    python3 scripts/report_generator.py"
 echo ""
 echo "  To stop the log generator:"
 echo "    pkill -f log_generator.py"
+echo ""
+echo "  To stop the geomap:"
+echo "    pkill -f geomap.py"
 echo ""
 echo "  To stop all containers:"
 echo "    docker compose down"
