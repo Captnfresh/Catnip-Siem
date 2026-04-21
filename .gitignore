@@ -17,3 +17,4 @@ Thumbs.db
 *.log
 logs/
 reports/
+geomap/attacks.json
