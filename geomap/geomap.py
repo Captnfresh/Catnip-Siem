@@ -1,115 +1,180 @@
-import requests, json, time, re
-from flask import Flask, send_file, jsonify
+#!/usr/bin/env python3
+"""
+Catnip Games SIEM - Live IP Geolocation Attack Map
+Polls Graylog 6.x API, geolocates attacker IPs via ip-api.com,
+and serves a live dark-themed world map on port 8888.
+Author: Akhamas Balouch
+"""
 
-import requests, json, time, re
+import os
+import json
+import time
+import threading
+import requests
 from flask import Flask, send_file, jsonify
+from requests.auth import HTTPBasicAuth
 
+# ─────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────
 GRAYLOG_URL   = "http://127.0.0.1:9000"
 GRAYLOG_USER  = "admin"
-GRAYLOG_PASS  = "CatnipAdmin@2026"   # ← your actual password
+GRAYLOG_PASS  = os.environ.get("GRAYLOG_PASS", "CatnipAdmin@2026")
 POLL_INTERVAL = 15
-OUTPUT_FILE   = "attacks.json"
+OUTPUT_FILE   = os.path.join(os.path.dirname(__file__), "attacks.json")
+
+HEADERS = {
+    "Content-Type":   "application/json",
+    "Accept":         "application/json",
+    "X-Requested-By": "catnip-geomap"
+}
 
 app = Flask(__name__)
 
+# ─────────────────────────────────────────
+# Graylog 6.x API query
+# ─────────────────────────────────────────
 def get_recent_attacks():
+    """Query Graylog 6.x /api/search/messages for attack events."""
     try:
-        resp = requests.get(
-            f"{GRAYLOG_URL}/api/search/universal/relative",
-            params={
-                "query": 'action:failed OR action:login_failed OR event_type:ssh_brute OR event_type:credential_stuffing',
-                "range": 3600,
-                "limit": 100
-            },
-            auth=(GRAYLOG_USER, GRAYLOG_PASS),
-            headers={"Accept": "application/json"},
-            timeout=5
+        body = {
+            "query":     "action:failed OR action:login_failed OR action:credential_stuffing OR action:suspicious_login",
+            "timerange": {"type": "relative", "range": 3600},
+            "fields":    ["source_ip", "event_type", "action", "username"],
+            "size":      500
+        }
+        resp = requests.post(
+            f"{GRAYLOG_URL}/api/search/messages",
+            headers=HEADERS,
+            auth=HTTPBasicAuth(GRAYLOG_USER, GRAYLOG_PASS),
+            json=body,
+            timeout=10
         )
-        return resp.json().get("messages", [])
+        resp.raise_for_status()
+        data   = resp.json()
+        schema = [col["field"] for col in data.get("schema", [])]
+        rows   = data.get("datarows", [])
+        return [dict(zip(schema, row)) for row in rows]
     except Exception as e:
         print(f"[!] Graylog query failed: {e}")
         return []
 
+# ─────────────────────────────────────────
+# IP validation
+# ─────────────────────────────────────────
 def is_public_ip(ip):
     if not ip:
         return False
-    return not (ip.startswith("10.") or
-                ip.startswith("172.") or
-                ip.startswith("192.168.") or
-                ip.startswith("127."))
+    return not (
+        ip.startswith("10.")      or
+        ip.startswith("172.")     or
+        ip.startswith("192.168.") or
+        ip.startswith("127.")     or
+        ip.startswith("0.")
+    )
 
-def extract_ip(msg_obj):
-    # source_ip is the most reliable field in Catnip logs
-    ip = msg_obj.get("source_ip", "")
-    if is_public_ip(ip):
-        return ip
-    # fallback to regex on message text
-    txt = msg_obj.get("message", "")
-    m = re.search(r'from (\d+\.\d+\.\d+\.\d+)', txt)
-    if m and is_public_ip(m.group(1)):
-        return m.group(1)
-    return None
-
+# ─────────────────────────────────────────
+# Geolocation via ip-api.com (free, no key)
+# ─────────────────────────────────────────
 def geolocate(ip):
     try:
         r = requests.get(
             f"http://ip-api.com/json/{ip}?fields=status,lat,lon,country,city",
-            timeout=5)
+            timeout=5
+        )
         d = r.json()
         if d.get("status") == "success":
             return d
-    except:
+    except Exception:
         pass
     return None
 
+# ─────────────────────────────────────────
+# Background polling loop
+# ─────────────────────────────────────────
 def poll_and_update():
-    seen = {}
+    geo_cache = {}  # cache geolocations so each IP is only looked up once
+
     while True:
         print("[*] Polling Graylog...")
-        points = []
         messages = get_recent_attacks()
         print(f"[*] Got {len(messages)} attack messages")
-        for m in messages:
-            msg_obj = m.get("message", {})
-            ip = extract_ip(msg_obj)
-            if not ip:
+
+        ip_counts = {}
+        ip_meta   = {}
+
+        for msg in messages:
+            ip         = msg.get("source_ip", "")
+            event_type = msg.get("event_type", "unknown")
+
+            if not is_public_ip(ip):
                 continue
-            if ip not in seen:
+
+            if ip not in ip_counts:
+                ip_counts[ip] = 0
+                ip_meta[ip]   = event_type
+            ip_counts[ip] += 1
+
+        points = []
+        for ip, count in ip_counts.items():
+            # Use cached geolocation or look up fresh
+            if ip not in geo_cache:
                 geo = geolocate(ip)
                 if geo:
-                    seen[ip] = {
-                        "ip": ip,
-                        "lat": geo["lat"],
-                        "lon": geo["lon"],
-                        "country": geo.get("country", "?"),
-                        "city": geo.get("city", "?"),
-                        "count": 1,
-                        "event_type": msg_obj.get("event_type", "unknown")
-                    }
-                    print(f"  [{ip}] -> {seen[ip]['city']}, {seen[ip]['country']}")
-            else:
-                seen[ip]["count"] += 1
-            if ip in seen:
-                points.append(seen[ip])
+                    geo_cache[ip] = geo
+                    print(f"  [{ip}] -> {geo.get('city')}, {geo.get('country')}")
+                else:
+                    continue
+
+            geo = geo_cache[ip]
+            points.append({
+                "ip":         ip,
+                "lat":        geo["lat"],
+                "lon":        geo["lon"],
+                "country":    geo.get("country", "Unknown"),
+                "city":       geo.get("city", "Unknown"),
+                "count":      count,
+                "event_type": ip_meta.get(ip, "unknown")
+            })
+
         with open(OUTPUT_FILE, "w") as f:
             json.dump(points, f)
-        print(f"[✓] {len(points)} points written.")
+
+        print(f"[✓] {len(points)} attack sources mapped.")
         time.sleep(POLL_INTERVAL)
 
+# ─────────────────────────────────────────
+# Flask routes
+# ─────────────────────────────────────────
 @app.route("/")
 def index():
-    return send_file("map.html")
+    return send_file(os.path.join(os.path.dirname(__file__), "map.html"))
 
 @app.route("/attacks.json")
 def attacks():
     try:
         return send_file(OUTPUT_FILE)
-    except:
+    except Exception:
         return jsonify([])
 
+# ─────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────
 if __name__ == "__main__":
-    import threading
+    # Initialise empty attacks file
+    if not os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE, "w") as f:
+            json.dump([], f)
+
+    # Start polling thread
     t = threading.Thread(target=poll_and_update, daemon=True)
     t.start()
-    print("[*] Map available at http://127.0.0.1:8888")
-    app.run(port=8888)
+
+    print("=============================================================")
+    print("  Catnip Games SIEM - Live IP Attack Map")
+    print("=============================================================")
+    print(f"  Map available at: http://127.0.0.1:8888")
+    print(f"  Polling Graylog every {POLL_INTERVAL} seconds")
+    print(f"  Press Ctrl+C to stop")
+    print("=============================================================")
+    app.run(port=8888, debug=False)
