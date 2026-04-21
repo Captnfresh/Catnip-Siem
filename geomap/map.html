@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Attack Map - Graylog SIEM</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin:0; background:#0a0a0a; font-family:monospace; color:#00ff88; }
+    #header { padding:12px 20px; background:#111;
+              border-bottom:1px solid #00ff88; font-size:18px; }
+    #map { height: calc(100vh - 50px); }
+    .counter { float:right; font-size:14px; color:#ff4444; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    🛡️ Graylog SIEM — Live IP Attack Map
+    <span class="counter" id="counter">Loading...</span>
+  </div>
+  <div id="map"></div>
+  <script>
+    const map = L.map('map').setView([20, 0], 2);
+    L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      { attribution: '© OpenStreetMap © CARTO', maxZoom: 19 }
+    ).addTo(map);
+
+    let markers = {};
+
+    function refresh() {
+      fetch('/attacks.json?t=' + Date.now())
+        .then(r => r.json())
+        .then(attacks => {
+          document.getElementById('counter').textContent =
+            attacks.length + ' attack sources detected';
+          attacks.forEach(a => {
+            if (markers[a.ip]) return;
+            const c = L.circleMarker([a.lat, a.lon], {
+              radius: Math.min(6 + a.count * 2, 20),
+              fillColor: "#ff2222", color: "#ff6666",
+              weight: 1, opacity: 0.9, fillOpacity: 0.7
+            }).addTo(map);
+            c.bindPopup(
+              '<b>🔴 Attack Source</b><br>IP: ' + a.ip +
+              '<br>Location: ' + a.city + ', ' + a.country +
+              '<br>Attempts: ' + a.count
+            );
+            markers[a.ip] = c;
+          });
+        });
+    }
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>
