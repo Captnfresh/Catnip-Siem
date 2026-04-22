@@ -25,7 +25,7 @@ def _read_env(key: str, default: str = "") -> str:
                 return line.split("=", 1)[1].strip().strip('"').strip("'")
     return os.environ.get(key, default)
 
-GRAYLOG_URL   = "http://127.0.0.1:9000"
+GRAYLOG_URL   = "http://[::1]:9000"
 GRAYLOG_USER  = "admin"
 GRAYLOG_PASS  = _read_env("GRAYLOG_ADMIN_PASSWORD") or _read_env("GRAYLOG_PASSWORD")
 POLL_INTERVAL = 15

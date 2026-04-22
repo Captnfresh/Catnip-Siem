@@ -25,7 +25,7 @@ def _read_env(key: str, default: str = "") -> str:
                 return line.split("=", 1)[1].strip().strip('"').strip("'")
     return os.environ.get(key, default)
 
-GRAYLOG_HOST = "http://localhost:9000"
+GRAYLOG_HOST = "http://[::1]:9000"
 GRAYLOG_API  = f"{GRAYLOG_HOST}/api"
 GRAYLOG_USER = "admin"
 GRAYLOG_PASS = _read_env("GRAYLOG_ADMIN_PASSWORD") or _read_env("GRAYLOG_PASSWORD")

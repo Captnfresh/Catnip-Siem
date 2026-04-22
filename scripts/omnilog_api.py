@@ -65,7 +65,12 @@ ML_URL        = _cfg("ML_SERVICE_URL", "http://localhost:5001")
 OMNILOG_PORT  = int(_cfg("OMNILOG_PORT", "5002"))
 ANTHROPIC_KEY = _cfg("ANTHROPIC_API_KEY", "")
 
-GRAYLOG_BASE  = f"http://{GRAYLOG_HOST}:{GRAYLOG_PORT}/api"
+# On Windows/WSL2 with Docker Desktop, IPv4 localhost can return 405 while IPv6
+# works correctly. Bracket IPv6 addresses for use in URLs.
+_gl_host_url = f"[{GRAYLOG_HOST}]" if ":" in GRAYLOG_HOST else GRAYLOG_HOST
+if GRAYLOG_HOST in ("localhost", "127.0.0.1"):
+    _gl_host_url = "[::1]"
+GRAYLOG_BASE  = f"http://{_gl_host_url}:{GRAYLOG_PORT}/api"
 _GL_HEADERS   = {"Accept": "application/json", "X-Requested-By": "omnilog"}
 _GL_AUTH      = (GRAYLOG_USER, GRAYLOG_PASS)
 _TIMEOUT      = 8
@@ -290,8 +295,13 @@ def _graylog_search(q: str, limit: int = 20, range_s: int = 3600) -> list[dict]:
 
 def _graylog_alive() -> bool:
     try:
-        r = requests.get(f"{GRAYLOG_BASE}/system/lbstatus", timeout=3)
-        return r.status_code == 200
+        r = requests.get(
+            f"{GRAYLOG_BASE}/system",
+            auth=_GL_AUTH,
+            headers=_GL_HEADERS,
+            timeout=3,
+        )
+        return r.status_code == 200 and r.json().get("lb_status") == "alive"
     except Exception:
         return False
 
@@ -701,6 +711,111 @@ def clear_session(session_id: str):
     with _sessions_lock:
         _sessions.pop(session_id, None)
     return jsonify({"status": "cleared", "sessionId": session_id})
+
+
+@app.get("/zero-day-alerts")
+def zero_day_alerts():
+    """
+    Scan recent Graylog events through the ML models and return threats that
+    Graylog rules would miss: IsolationForest zero-day anomalies and
+    high-risk ML predictions from unexpected behaviour patterns.
+
+    Also auto-trains the IsolationForest if it hasn't been trained yet.
+    """
+    if not _graylog_alive():
+        return jsonify({"error": "Graylog not connected", "threats": []}), 503
+
+    raw = _graylog_search("*", limit=200, range_s=3600)
+    if not raw:
+        return jsonify({
+            "total_scanned": 0, "zero_day_count": 0,
+            "model_trained": False, "threats": [],
+        })
+
+    events = [m.get("message", m) for m in raw]
+
+    # Check zero-day model status and auto-train if needed
+    zd_trained = False
+    try:
+        h = requests.get(f"{ML_URL}/health", timeout=3)
+        zd_trained = h.json().get("zero_day_model") == "loaded"
+    except Exception:
+        pass
+
+    if not zd_trained and len(events) >= 10:
+        try:
+            requests.post(
+                f"{ML_URL}/train/zero-day",
+                json={"platform": "graylog", "events": events, "contamination": 0.05},
+                timeout=30,
+            )
+            zd_trained = True
+        except Exception:
+            pass
+
+    # Batch-score all events
+    try:
+        sr = requests.post(
+            f"{ML_URL}/predict/batch",
+            json={"platform": "graylog", "events": events},
+            timeout=20,
+        )
+        sr.raise_for_status()
+        predictions = sr.json().get("results", [])
+    except Exception as exc:
+        return jsonify({"error": f"ML service error: {exc}", "threats": []}), 503
+
+    threats = []
+    for i, (msg, pred) in enumerate(zip(raw[:len(predictions)], predictions)):
+        inner     = msg.get("message", msg)
+        is_zd     = pred.get("is_zero_day", False)
+        combined  = pred.get("combined_risk", 0.0)
+        zd_score  = pred.get("zero_day_score", 0.0)
+        severity  = pred.get("ml_severity", "info")
+        confidence = pred.get("ml_confidence", 0.0)
+
+        # Only surface: confirmed zero-days OR high combined-risk threats
+        if not is_zd and combined < 0.55:
+            continue
+
+        if is_zd:
+            attack_type = "Zero-Day Anomaly"
+            description = (
+                f"IsolationForest detected behaviour deviating from baseline "
+                f"(anomaly score {zd_score:.2f}). No known signature match."
+            )
+        elif severity in ("critical", "high"):
+            attack_type = f"High-Risk ML Detection ({severity.title()})"
+            description = (
+                f"Classifier flagged {severity} severity with {confidence:.0%} confidence. "
+                "Pattern not captured by existing Graylog rules."
+            )
+        else:
+            attack_type = "Behavioural Anomaly"
+            description = f"Unusual activity pattern (combined risk {combined:.2f})."
+
+        threats.append({
+            "id":           inner.get("_id", str(i)),
+            "timestamp":    inner.get("timestamp", ""),
+            "source":       inner.get("source", inner.get("gl2_source_input", "unknown")),
+            "message":      (inner.get("message") or inner.get("short_message", ""))[:120],
+            "zero_day_score": round(zd_score, 3),
+            "combined_risk":  round(combined, 3),
+            "ml_severity":    severity,
+            "attack_type":    attack_type,
+            "description":    description,
+            "is_zero_day":    is_zd,
+        })
+
+    threats.sort(key=lambda t: t["combined_risk"], reverse=True)
+    threats = threats[:20]
+
+    return jsonify({
+        "total_scanned":  len(predictions),
+        "zero_day_count": sum(1 for t in threats if t["is_zero_day"]),
+        "model_trained":  zd_trained,
+        "threats":        threats,
+    })
 
 
 # ---------------------------------------------------------------------------

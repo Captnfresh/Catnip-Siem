@@ -44,6 +44,34 @@ export async function fetchAnalysis(
   }
 }
 
+export interface ZeroDayThreat {
+  id: string;
+  timestamp: string;
+  source: string;
+  message: string;
+  zero_day_score: number;
+  combined_risk: number;
+  ml_severity: string;
+  attack_type: string;
+  description: string;
+  is_zero_day: boolean;
+}
+
+export interface ZeroDayAlertsResponse {
+  total_scanned: number;
+  zero_day_count: number;
+  model_trained: boolean;
+  threats: ZeroDayThreat[];
+}
+
+export async function fetchZeroDayAlerts(): Promise<ZeroDayAlertsResponse> {
+  const res = await fetch(`${BASE}/zero-day-alerts`, {
+    signal: AbortSignal.timeout(35000),
+  });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+  return res.json();
+}
+
 export async function clearSession(sessionId: string): Promise<void> {
   try {
     await fetch(`${BASE}/chat/session/${sessionId}`, { method: "DELETE" });

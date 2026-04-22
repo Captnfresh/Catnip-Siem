@@ -21,3 +21,7 @@ geomap/attacks.json
 
 # ML model binaries (large files — copy from Google Colab after training)
 models/*.pkl
+
+# Bun lockfiles — project uses npm
+bun.lock
+bun.lockb
