@@ -1008,21 +1008,44 @@ def status():
     gl_ok = _graylog_alive()
     ml_ok = _ml_alive()
 
-    risk_score   = 42
+    risk_score   = 0
     alert_count  = 0
     total_events = 0
 
     if gl_ok:
         try:
+            # Total events in last hour
             r = requests.get(
                 f"{GRAYLOG_BASE}/search/universal/relative",
                 params={"query": "*", "range": 3600, "limit": 1},
                 headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
             )
             total_events = r.json().get("total_results", 0)
-            risk_score = min(100, int(total_events / 100))
         except Exception:
             pass
+
+        try:
+            # Active alerts = high/critical severity events + known attack actions
+            _ALERT_QUERY = (
+                "severity:(critical OR high OR emergency) OR "
+                "action:(brute_force OR ddos_detected OR sql_injection OR "
+                "credential_stuffing OR suspicious_login OR lateral_movement)"
+            )
+            ra = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/relative",
+                params={"query": _ALERT_QUERY, "range": 3600, "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
+            alert_count = ra.json().get("total_results", 0)
+        except Exception:
+            pass
+
+        # Risk score: blend alert density and total volume
+        if total_events > 0:
+            alert_ratio = alert_count / total_events
+            volume_score = min(50, int(total_events / 200))
+            alert_score  = min(50, int(alert_ratio * 500))
+            risk_score   = min(100, volume_score + alert_score)
 
     return jsonify({
         "graylog_connected":      gl_ok,
