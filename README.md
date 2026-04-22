@@ -98,6 +98,7 @@ Catnip-Siem/
 ├── scripts/
 │   ├── log_generator.py        # Simulates Catnip Games infrastructure
 │   └── report_generator.py     # Automated weekly security report
+|   └── baseline_engine.py      # behavioural baseline engine for anomaly detection
 ├── content-packs/
 │   └── catnip-siem-pack.json   # Full Graylog config — streams, alerts,
 │                               # dashboards, extractors, notifications
