@@ -17,7 +17,7 @@ echo.
 REM ─────────────────────────────────────────
 REM Step 1 - Check dependencies
 REM ─────────────────────────────────────────
-echo [1/7] Checking dependencies...
+echo [1/8] Checking dependencies...
 echo.
 
 docker --version >nul 2>&1
@@ -50,7 +50,7 @@ REM ─────────────────────────�
 REM Step 2 - Check Docker is running
 REM ─────────────────────────────────────────
 echo.
-echo [2/7] Checking Docker Desktop is running...
+echo [2/8] Checking Docker Desktop is running...
 echo.
 
 docker ps >nul 2>&1
@@ -66,7 +66,7 @@ REM ─────────────────────────�
 REM Step 3 - Check .env and load password
 REM ─────────────────────────────────────────
 echo.
-echo [3/7] Checking environment configuration...
+echo [3/8] Checking environment configuration...
 echo.
 
 if not exist ".env" (
@@ -112,7 +112,7 @@ REM ─────────────────────────�
 REM Step 4 - Start Docker stack
 REM ─────────────────────────────────────────
 echo.
-echo [4/7] Starting Docker containers...
+echo [4/8] Starting Docker containers...
 echo.
 
 docker compose up -d
@@ -169,7 +169,7 @@ REM ─────────────────────────�
 REM Step 5 - Install content pack
 REM ─────────────────────────────────────────
 echo.
-echo [5/7] Installing Graylog content pack...
+echo [5/8] Installing Graylog content pack...
 echo.
 
 set CONTENT_PACK=content-packs\catnip-siem-pack.json
@@ -262,7 +262,7 @@ REM ─────────────────────────�
 REM Step 6 - Install Python deps + start generator
 REM ─────────────────────────────────────────
 echo.
-echo [6/7] Installing Python dependencies and starting log generator...
+echo [6/8] Installing Python dependencies and starting log generator...
 echo.
 
 python -m pip install requests --quiet >nul 2>&1
@@ -287,7 +287,7 @@ REM ─────────────────────────�
 REM Step 7 - Smoke test
 REM ─────────────────────────────────────────
 echo.
-echo [7/7] Verifying end-to-end log flow...
+echo [7/8] Verifying end-to-end log flow...
 echo.
 
 set SMOKE_RETRIES=10
@@ -332,6 +332,52 @@ if %LOGS_FLOWING% equ 0 (
 )
 
 REM ─────────────────────────────────────────
+REM Step 8 - Start OmniLog AI assistant
+REM ─────────────────────────────────────────
+echo.
+echo [8/8] Starting OmniLog AI assistant...
+echo.
+
+echo [..] Installing OmniLog Python dependencies...
+python -m pip install -r ml\requirements.txt --quiet >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [OK] OmniLog Python dependencies ready
+) else (
+    echo [WARN] Could not install OmniLog deps - run: pip install -r ml\requirements.txt
+)
+
+REM Kill any stale instances
+taskkill /F /FI "WINDOWTITLE eq ml_service*" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq omnilog_api*" >nul 2>&1
+timeout /t 1 /nobreak >nul 2>&1
+
+echo [..] Starting ML service (port 5001)...
+start "ml_service" /B python scripts\ml_service.py > logs\ml_service.log 2>&1
+timeout /t 3 /nobreak >nul 2>&1
+echo [OK] ML service started
+
+echo [..] Starting OmniLog API (port 5002)...
+start "omnilog_api" /B python scripts\omnilog_api.py > logs\omnilog_api.log 2>&1
+timeout /t 3 /nobreak >nul 2>&1
+echo [OK] OmniLog API started
+
+node --version >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    if not exist "omnilog\node_modules" (
+        echo [..] Installing OmniLog frontend dependencies (first run)...
+        pushd omnilog
+        call npm install --silent >nul 2>&1
+        popd
+    )
+    echo [..] Starting OmniLog frontend (port 5173)...
+    start "omnilog_ui" /B cmd /c "cd omnilog && node_modules\.bin\vite --port 5173 > ..\logs\omnilog_ui.log 2>&1"
+    timeout /t 4 /nobreak >nul 2>&1
+    echo [OK] OmniLog UI started - http://localhost:5173
+) else (
+    echo [WARN] Node.js not found - skipping OmniLog frontend. Install from https://nodejs.org
+)
+
+REM ─────────────────────────────────────────
 REM Done
 REM ─────────────────────────────────────────
 echo.
@@ -346,6 +392,10 @@ echo.
 echo   Graylog UI:    http://localhost:9000
 echo   Username:      admin
 echo   Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)
+echo   Attack Map:    http://localhost:8888
+echo   OmniLog UI:    http://localhost:5173
+echo   OmniLog API:   http://localhost:5002
+echo   ML Service:    http://localhost:5001
 echo.
 echo   Log generator: running in background
 echo   Generator log: logs\generator.log
@@ -353,7 +403,9 @@ echo.
 echo   To generate a security report:
 echo     python scripts\report_generator.py
 echo.
-echo   To stop all containers:
+echo   To stop everything:
+echo     taskkill /F /IM python.exe
+echo     taskkill /FI "WINDOWTITLE eq omnilog_ui*"
 echo     docker compose down
 echo.
 echo =============================================================

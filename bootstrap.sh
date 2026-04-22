@@ -56,7 +56,7 @@ echo ""
 # ─────────────────────────────────────────
 # Step 1 — Detect OS
 # ─────────────────────────────────────────
-step "[1/7] Detecting operating system..."
+step "[1/8] Detecting operating system..."
 
 OS="unknown"
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -75,7 +75,7 @@ fi
 # ─────────────────────────────────────────
 # Step 2 — Check dependencies
 # ─────────────────────────────────────────
-step "[2/7] Checking dependencies..."
+step "[2/8] Checking dependencies..."
 
 if ! command -v docker &>/dev/null; then
     fail "Docker not found. Please install Docker Desktop from https://docker.com and try again."
@@ -99,7 +99,7 @@ fi
 # ─────────────────────────────────────────
 # Step 3 — Set vm.max_map_count (Linux/WSL only)
 # ─────────────────────────────────────────
-step "[3/7] Configuring system settings..."
+step "[3/8] Configuring system settings..."
 
 if [[ "$OS" == "wsl" || "$OS" == "linux" ]]; then
     info "Setting vm.max_map_count=262144 (required by OpenSearch)..."
@@ -118,7 +118,7 @@ fi
 # ─────────────────────────────────────────
 # Step 4 — Check .env, auto-fix CRLF, load password
 # ─────────────────────────────────────────
-step "[4/7] Checking environment configuration..."
+step "[4/8] Checking environment configuration..."
 
 if [ ! -f ".env" ]; then
     echo ""
@@ -170,7 +170,7 @@ ok "Graylog admin credentials loaded from .env"
 # ─────────────────────────────────────────
 # Step 5 — Start Docker stack and wait for Graylog
 # ─────────────────────────────────────────
-step "[5/7] Starting Docker containers..."
+step "[5/8] Starting Docker containers..."
 
 info "Running docker compose up -d..."
 docker compose up -d
@@ -217,7 +217,7 @@ ok "Graylog authentication verified"
 # ─────────────────────────────────────────
 # Step 6 — Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
-step "[6/7] Installing Graylog content pack..."
+step "[6/8] Installing Graylog content pack..."
 
 # Helper: find content pack ID by name (returns empty string if not found)
 find_pack_id_by_name() {
@@ -308,7 +308,7 @@ fi
 # ─────────────────────────────────────────
 # Step 7 — Start log generator and verify logs are flowing
 # ─────────────────────────────────────────
-step "[7/7] Starting log generator and verifying end-to-end flow..."
+step "[7/8] Starting log generator and verifying end-to-end flow..."
 
 info "Installing Python dependencies..."
 pip3 install requests --break-system-packages --quiet 2>/dev/null || \
@@ -402,6 +402,69 @@ if [ $LOGS_FLOWING -ne 1 ]; then
 fi
 
 # ─────────────────────────────────────────
+# Step 8 — Start OmniLog AI assistant
+# ─────────────────────────────────────────
+step "[8/8] Starting OmniLog AI assistant..."
+
+OMNILOG_DIR="$(dirname "$0")/omnilog"
+ML_LOG="$LOGS_DIR/ml_service.log"
+OMNILOG_API_LOG="$LOGS_DIR/omnilog_api.log"
+OMNILOG_UI_LOG="$LOGS_DIR/omnilog_ui.log"
+
+info "Installing OmniLog Python dependencies..."
+pip3 install -r "$(dirname "$0")/ml/requirements.txt" --break-system-packages --quiet 2>/dev/null || \
+pip3 install -r "$(dirname "$0")/ml/requirements.txt" --quiet 2>/dev/null || \
+python3 -m pip install -r "$(dirname "$0")/ml/requirements.txt" --quiet 2>/dev/null || \
+warn "Could not install OmniLog dependencies — run: pip3 install -r ml/requirements.txt"
+ok "OmniLog Python dependencies ready"
+
+# Kill any stale instances
+pkill -f "ml_service.py" 2>/dev/null || true
+pkill -f "omnilog_api.py" 2>/dev/null || true
+sleep 1
+
+info "Starting ML service (port 5001)..."
+nohup python3 "$SCRIPTS_DIR/ml_service.py" > "$ML_LOG" 2>&1 &
+ML_PID=$!
+sleep 3
+
+if kill -0 "$ML_PID" 2>/dev/null; then
+    ok "ML service running (PID: $ML_PID)"
+else
+    warn "ML service failed to start. Check: $ML_LOG"
+fi
+
+info "Starting OmniLog API (port 5002)..."
+nohup python3 "$SCRIPTS_DIR/omnilog_api.py" > "$OMNILOG_API_LOG" 2>&1 &
+OMNILOG_API_PID=$!
+sleep 3
+
+if kill -0 "$OMNILOG_API_PID" 2>/dev/null; then
+    ok "OmniLog API running (PID: $OMNILOG_API_PID)"
+else
+    warn "OmniLog API failed to start. Check: $OMNILOG_API_LOG"
+fi
+
+OMNILOG_UI_PID=""
+if [ -d "$OMNILOG_DIR" ] && command -v node &>/dev/null; then
+    if [ ! -d "$OMNILOG_DIR/node_modules" ]; then
+        info "Installing OmniLog frontend dependencies (first run)..."
+        (cd "$OMNILOG_DIR" && npm install --silent 2>/dev/null) || warn "npm install failed"
+    fi
+    info "Starting OmniLog frontend (port 5173)..."
+    nohup bash -c "cd '$OMNILOG_DIR' && node_modules/.bin/vite --port 5173" > "$OMNILOG_UI_LOG" 2>&1 &
+    OMNILOG_UI_PID=$!
+    sleep 4
+    if kill -0 "$OMNILOG_UI_PID" 2>/dev/null; then
+        ok "OmniLog UI running (PID: $OMNILOG_UI_PID) — http://localhost:5173"
+    else
+        warn "OmniLog UI failed to start. Check: $OMNILOG_UI_LOG"
+    fi
+else
+    warn "Node.js not found — skipping OmniLog frontend. Install from https://nodejs.org"
+fi
+
+# ─────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────
 echo ""
@@ -417,6 +480,9 @@ echo "  Graylog UI:      $GRAYLOG_URL"
 echo "  Username:        admin"
 echo "  Password:        (from GRAYLOG_ADMIN_PASSWORD in .env)"
 echo "  Attack Map:      http://localhost:8888"
+echo "  OmniLog UI:      http://localhost:5173"
+echo "  OmniLog API:     http://localhost:5002"
+echo "  ML Service:      http://localhost:5001"
 echo ""
 echo "  Log generator:   running in background (PID: $GENERATOR_PID)"
 echo "  Generator logs:  $GENERATOR_LOG"
@@ -424,13 +490,12 @@ echo ""
 echo "  To generate a security report:"
 echo "    python3 scripts/report_generator.py"
 echo ""
-echo "  To stop the log generator:"
+echo "  To stop everything:"
 echo "    pkill -f log_generator.py"
-echo ""
-echo "  To stop the geomap:"
 echo "    pkill -f geomap.py"
-echo ""
-echo "  To stop all containers:"
+echo "    pkill -f ml_service.py"
+echo "    pkill -f omnilog_api.py"
+echo "    pkill -f vite"
 echo "    docker compose down"
 echo ""
 echo "============================================================="

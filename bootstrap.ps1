@@ -53,7 +53,7 @@ Write-Host ""
 # ─────────────────────────────────────────
 # Step 1 — Check dependencies
 # ─────────────────────────────────────────
-Write-Step "[1/7] Checking dependencies..."
+Write-Step "[1/8] Checking dependencies..."
 
 try {
     $dockerVersion = docker --version 2>&1
@@ -80,7 +80,7 @@ try {
 # ─────────────────────────────────────────
 # Step 2 — Check Docker Desktop is running
 # ─────────────────────────────────────────
-Write-Step "[2/7] Checking Docker Desktop is running..."
+Write-Step "[2/8] Checking Docker Desktop is running..."
 
 try {
     docker ps 2>&1 | Out-Null
@@ -92,7 +92,7 @@ try {
 # ─────────────────────────────────────────
 # Step 3 — Check .env exists and load password
 # ─────────────────────────────────────────
-Write-Step "[3/7] Checking environment configuration..."
+Write-Step "[3/8] Checking environment configuration..."
 
 if (-not (Test-Path $envFile)) {
     Write-Host ""
@@ -140,7 +140,7 @@ $stdHeaders = @{ "X-Requested-By" = "bootstrap" }
 # ─────────────────────────────────────────
 # Step 4 — Start Docker stack
 # ─────────────────────────────────────────
-Write-Step "[4/7] Starting Docker containers..."
+Write-Step "[4/8] Starting Docker containers..."
 
 Write-Info "Running docker compose up -d..."
 Set-Location $SCRIPT_DIR
@@ -190,7 +190,7 @@ try {
 # ─────────────────────────────────────────
 # Step 5 — Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
-Write-Step "[5/7] Installing Graylog content pack..."
+Write-Step "[5/8] Installing Graylog content pack..."
 
 function Find-PackIdByName {
     try {
@@ -267,7 +267,7 @@ try {
 # ─────────────────────────────────────────
 # Step 6 — Start log generator
 # ─────────────────────────────────────────
-Write-Step "[6/7] Installing Python dependencies and starting log generator..."
+Write-Step "[6/8] Installing Python dependencies and starting log generator..."
 
 try {
     python -m pip install requests --quiet 2>&1 | Out-Null
@@ -324,7 +324,7 @@ Write-Ok "Log generator running (PID: $($process.Id))"
 # ─────────────────────────────────────────
 # Step 7 — Smoke test: verify logs are flowing
 # ─────────────────────────────────────────
-Write-Step "[7/7] Verifying end-to-end log flow..."
+Write-Step "[7/8] Verifying end-to-end log flow..."
 
 $smokeRetries = 10
 $smokeCount   = 0
@@ -359,6 +359,85 @@ if (-not $logsFlowing) {
 }
 
 # ─────────────────────────────────────────
+# Step 8 — Start OmniLog AI assistant
+# ─────────────────────────────────────────
+Write-Step "[8/8] Starting OmniLog AI assistant..."
+
+$mlLog       = Join-Path $LOGS_DIR "ml_service.log"
+$apiLog      = Join-Path $LOGS_DIR "omnilog_api.log"
+$uiLog       = Join-Path $LOGS_DIR "omnilog_ui.log"
+$omnilogDir  = Join-Path $SCRIPT_DIR "omnilog"
+$requirementsFile = Join-Path $SCRIPT_DIR "ml\requirements.txt"
+
+Write-Info "Installing OmniLog Python dependencies..."
+try {
+    python -m pip install -r $requirementsFile --quiet 2>&1 | Out-Null
+    Write-Ok "OmniLog Python dependencies ready"
+} catch {
+    Write-Warn "Could not install OmniLog deps. Run manually: pip install -r ml\requirements.txt"
+}
+
+# Kill any stale instances
+Get-Process python* -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "ml_service|omnilog_api" } |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+
+Write-Info "Starting ML service (port 5001)..."
+$mlProcess = Start-Process python `
+    -ArgumentList (Join-Path $SCRIPTS_DIR "ml_service.py") `
+    -RedirectStandardOutput $mlLog `
+    -RedirectStandardError "$LOGS_DIR\ml_service_error.log" `
+    -WindowStyle Hidden -PassThru
+Start-Sleep -Seconds 3
+if (-not $mlProcess.HasExited) {
+    Write-Ok "ML service running (PID: $($mlProcess.Id))"
+} else {
+    Write-Warn "ML service failed to start. Check: $mlLog"
+}
+
+Write-Info "Starting OmniLog API (port 5002)..."
+$apiProcess = Start-Process python `
+    -ArgumentList (Join-Path $SCRIPTS_DIR "omnilog_api.py") `
+    -RedirectStandardOutput $apiLog `
+    -RedirectStandardError "$LOGS_DIR\omnilog_api_error.log" `
+    -WindowStyle Hidden -PassThru
+Start-Sleep -Seconds 3
+if (-not $apiProcess.HasExited) {
+    Write-Ok "OmniLog API running (PID: $($apiProcess.Id))"
+} else {
+    Write-Warn "OmniLog API failed to start. Check: $apiLog"
+}
+
+$omnilogUiPid = $null
+try {
+    $nodeVersion = node --version 2>&1
+    if (Test-Path $omnilogDir) {
+        if (-not (Test-Path (Join-Path $omnilogDir "node_modules"))) {
+            Write-Info "Installing OmniLog frontend dependencies (first run)..."
+            Push-Location $omnilogDir
+            npm install --silent 2>&1 | Out-Null
+            Pop-Location
+        }
+        Write-Info "Starting OmniLog frontend (port 5173)..."
+        $viteBin = Join-Path $omnilogDir "node_modules\.bin\vite.cmd"
+        $uiProcess = Start-Process cmd `
+            -ArgumentList "/c cd `"$omnilogDir`" && node_modules\.bin\vite --port 5173" `
+            -RedirectStandardOutput $uiLog `
+            -WindowStyle Hidden -PassThru
+        Start-Sleep -Seconds 4
+        if (-not $uiProcess.HasExited) {
+            $omnilogUiPid = $uiProcess.Id
+            Write-Ok "OmniLog UI running (PID: $omnilogUiPid) — http://localhost:5173"
+        } else {
+            Write-Warn "OmniLog UI failed to start. Check: $uiLog"
+        }
+    }
+} catch {
+    Write-Warn "Node.js not found — skipping OmniLog frontend. Install from https://nodejs.org"
+}
+
+# ─────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────
 Write-Host ""
@@ -373,6 +452,10 @@ Write-Host ""
 Write-Host "  Graylog UI:    $GRAYLOG_URL"
 Write-Host "  Username:      admin"
 Write-Host "  Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)"
+Write-Host "  Attack Map:    http://localhost:8888"
+Write-Host "  OmniLog UI:    http://localhost:5173"
+Write-Host "  OmniLog API:   http://localhost:5002"
+Write-Host "  ML Service:    http://localhost:5001"
 Write-Host ""
 Write-Host "  Log generator: running in background (PID: $($process.Id))"
 Write-Host "  Generator log: $GENERATOR_LOG"
@@ -380,7 +463,8 @@ Write-Host ""
 Write-Host "  To generate a security report:"
 Write-Host "    python scripts\report_generator.py"
 Write-Host ""
-Write-Host "  To stop all containers:"
+Write-Host "  To stop everything:"
+Write-Host "    Stop-Process -Name python -Force"
 Write-Host "    docker compose down"
 Write-Host ""
 Write-Host "============================================================="
