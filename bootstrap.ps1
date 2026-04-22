@@ -434,10 +434,8 @@ try {
         }
         Write-Info "Starting OmniLog frontend (port 5173)..."
         $viteBin = Join-Path $omnilogDir "node_modules\.bin\vite.cmd"
-        $uiProcess = Start-Process cmd `
-            -ArgumentList "/c cd `"$omnilogDir`" && node_modules\.bin\vite --port 5173" `
-            -RedirectStandardOutput $uiLog `
-            -WindowStyle Hidden -PassThru
+        $cmdArgs = "/c cd /d `"$omnilogDir`" & node_modules\.bin\vite --port 5173"
+        $uiProcess = Start-Process "cmd.exe" -ArgumentList $cmdArgs -RedirectStandardOutput $uiLog -WindowStyle Hidden -PassThru
         Start-Sleep -Seconds 4
         if (-not $uiProcess.HasExited) {
             $omnilogUiPid = $uiProcess.Id
