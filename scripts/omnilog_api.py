@@ -65,7 +65,12 @@ ML_URL        = _cfg("ML_SERVICE_URL", "http://localhost:5001")
 OMNILOG_PORT  = int(_cfg("OMNILOG_PORT", "5002"))
 ANTHROPIC_KEY = _cfg("ANTHROPIC_API_KEY", "")
 
-GRAYLOG_BASE  = f"http://{GRAYLOG_HOST}:{GRAYLOG_PORT}/api"
+# On Windows/WSL2 with Docker Desktop, IPv4 localhost can return 405 while IPv6
+# works correctly. Bracket IPv6 addresses for use in URLs.
+_gl_host_url = f"[{GRAYLOG_HOST}]" if ":" in GRAYLOG_HOST else GRAYLOG_HOST
+if GRAYLOG_HOST in ("localhost", "127.0.0.1"):
+    _gl_host_url = "[::1]"
+GRAYLOG_BASE  = f"http://{_gl_host_url}:{GRAYLOG_PORT}/api"
 _GL_HEADERS   = {"Accept": "application/json", "X-Requested-By": "omnilog"}
 _GL_AUTH      = (GRAYLOG_USER, GRAYLOG_PASS)
 _TIMEOUT      = 8
@@ -82,6 +87,354 @@ def _get_claude():
         import anthropic
         _claude = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     return _claude
+
+# ---------------------------------------------------------------------------
+# CVE database (attack-type → CVE list)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Threat name classifier (keyword → human-readable threat name)
+# ---------------------------------------------------------------------------
+
+_THREAT_KEYWORDS: list[tuple[list[str], str]] = [
+    (["ssh failed", "ssh brute", "failed login:", "failed password", "sshd"], "SSH Brute Force"),
+    (["credential stuff", "stuffing attempt"], "Credential Stuffing"),
+    (["ddos attack", "ddos detected", "denial of service", "volumetric flood"], "DDoS Attack"),
+    (["sql inject", "' or 1=1", "union select", "drop table"], "SQL Injection"),
+    (["port scan", "nmap", "syn scan", "mass scan"], "Port Scan"),
+    (["xss", "cross-site scripting", "<script>"], "Cross-Site Scripting (XSS)"),
+    (["ransomware", "encrypt files", "ransom note"], "Ransomware"),
+    (["lateral movement", "psexec", "wmi exec", "pass-the-hash"], "Lateral Movement"),
+    (["exfil", "large upload", "data transfer out"], "Data Exfiltration"),
+    (["privilege escalat", "sudo abuse", "root exploit", "setuid"], "Privilege Escalation"),
+    (["malware", "trojan", "backdoor", "c2 beacon", "command and control"], "Malware / C2 Beacon"),
+    (["phishing", "spear phish", "suspicious email"], "Phishing Attempt"),
+    (["player login failed", "login failed:", "auth fail", "invalid password", "invalid credentials"], "Authentication Failure"),
+    (["normal traffic", "baseline traffic"], "Anomalous Baseline Traffic"),
+    (["network anomaly", "unusual traffic", "abnormal bandwidth"], "Network Anomaly"),
+]
+
+_THREAT_DETAILS: dict[str, dict] = {
+    "SSH Brute Force": {
+        "severity": "High",
+        "description": "Repeated SSH login failures indicating an automated password-guessing attack against game servers.",
+        "cves": [
+            {"id": "CVE-2023-38408", "description": "OpenSSH pre-auth RCE via forwarded ssh-agent", "cvss": 9.8},
+            {"id": "CVE-2023-48795", "description": "SSH Terrapin prefix truncation attack (Prefix Truncation)", "cvss": 5.9},
+        ],
+        "remediation": [
+            "Block the source IP at the perimeter firewall immediately",
+            "Switch SSH to key-based authentication and disable password login",
+            "Deploy fail2ban (or equivalent) to auto-ban IPs after 5 failed attempts",
+            "Move SSH to a non-standard port as a secondary deterrent",
+        ],
+    },
+    "Credential Stuffing": {
+        "severity": "High",
+        "description": "Automated use of breached username/password pairs against player authentication endpoints.",
+        "cves": [
+            {"id": "CVE-2021-42013", "description": "Apache path traversal enabling credential extraction", "cvss": 9.8},
+            {"id": "CVE-2023-44487", "description": "HTTP/2 Rapid Reset — used to exhaust auth rate-limiting", "cvss": 7.5},
+        ],
+        "remediation": [
+            "Add CAPTCHA and rate-limiting on all login endpoints",
+            "Force password reset for any account that received a successful hit",
+            "Enable multi-factor authentication (MFA) for all player accounts",
+            "Monitor for impossible-travel logins (same account, different country, within minutes)",
+        ],
+    },
+    "DDoS Attack": {
+        "severity": "Critical",
+        "description": "High-volume attack traffic designed to exhaust game server resources and deny service to players.",
+        "cves": [
+            {"id": "CVE-2023-44487", "description": "HTTP/2 Rapid Reset DDoS amplification technique", "cvss": 7.5},
+            {"id": "CVE-2022-26134", "description": "Confluence OGNL injection used for botnet recruitment", "cvss": 9.8},
+        ],
+        "remediation": [
+            "Activate upstream CDN scrubbing / DDoS mitigation immediately",
+            "Null-route attacker IP ranges at the BGP/ISP level if volumetric",
+            "Engage cloud autoscaling to absorb traffic spikes",
+            "Contact hosting provider and Cloudflare/Akamai for emergency mitigation",
+        ],
+    },
+    "SQL Injection": {
+        "severity": "Critical",
+        "description": "Malicious SQL injected into game API queries attempting to extract or corrupt database records.",
+        "cves": [
+            {"id": "CVE-2021-44228", "description": "Log4Shell JNDI injection often delivered via SQL error messages", "cvss": 10.0},
+            {"id": "CVE-2023-3024",  "description": "SQL injection via unsanitised input parameters", "cvss": 9.1},
+        ],
+        "remediation": [
+            "Parameterise all database queries (prepared statements — no string concatenation)",
+            "Enable WAF SQL injection rule-sets",
+            "Audit database logs for successful reads or modifications since the attack began",
+            "Rotate database credentials and revoke excessive permissions",
+        ],
+    },
+    "Port Scan": {
+        "severity": "Medium",
+        "description": "Systematic port probing to identify open services and potential entry points.",
+        "cves": [],
+        "remediation": [
+            "Block the scanning source IP at the perimeter firewall",
+            "Audit exposed ports and close everything not needed for game operation",
+            "Enable port-scan detection rules in your IDS/IPS",
+        ],
+    },
+    "Cross-Site Scripting (XSS)": {
+        "severity": "High",
+        "description": "Malicious JavaScript injected into user-facing game pages to steal sessions or redirect players.",
+        "cves": [
+            {"id": "CVE-2023-34942", "description": "Stored XSS in player profile fields", "cvss": 6.1},
+        ],
+        "remediation": [
+            "Sanitise and escape all user-supplied input before rendering in HTML",
+            "Implement a strict Content Security Policy (CSP) header",
+            "Audit stored player data for injected payloads",
+        ],
+    },
+    "Authentication Failure": {
+        "severity": "Medium",
+        "description": "Login failures — could be forgotten passwords, but patterns across many accounts suggest credential attacks.",
+        "cves": [
+            {"id": "CVE-2023-23397", "description": "NTLM hash theft via malicious calendar invites", "cvss": 9.8},
+        ],
+        "remediation": [
+            "Alert when the same IP generates more than 10 failures in 5 minutes",
+            "Confirm whether failures are from real users or automated tools",
+            "Temporarily lock accounts with excessive failures and notify the account owner",
+        ],
+    },
+    "Network Anomaly": {
+        "severity": "Medium",
+        "description": "Unusual traffic volume or patterns inconsistent with normal game-server operation.",
+        "cves": [
+            {"id": "CVE-2022-26923", "description": "AD CS domain privilege escalation via certificate template abuse", "cvss": 8.8},
+        ],
+        "remediation": [
+            "Capture and inspect packets on the anomalous flow",
+            "Confirm source and destination are expected game servers",
+            "Check for lateral movement (unexpected internal connections between servers)",
+        ],
+    },
+    "Lateral Movement": {
+        "severity": "Critical",
+        "description": "Attacker pivoting between internal game servers after initial compromise.",
+        "cves": [
+            {"id": "CVE-2021-34527", "description": "PrintNightmare — lateral movement via print spooler RCE", "cvss": 8.8},
+        ],
+        "remediation": [
+            "Isolate the compromised host from the internal network immediately",
+            "Audit Active Directory for new accounts or privilege changes",
+            "Rotate all service account credentials on affected systems",
+            "Begin a full incident response investigation",
+        ],
+    },
+    "Data Exfiltration": {
+        "severity": "Critical",
+        "description": "Sensitive player or game data being transferred to an external destination.",
+        "cves": [],
+        "remediation": [
+            "Block outbound connections from affected hosts immediately",
+            "Determine what data was accessed and by whom",
+            "Notify your Data Protection Officer — breach disclosure may be required",
+            "Deploy Data Loss Prevention (DLP) controls on network egress",
+        ],
+    },
+    "Ransomware": {
+        "severity": "Critical",
+        "description": "Ransomware activity detected — files may be actively encrypted.",
+        "cves": [],
+        "remediation": [
+            "Isolate affected hosts IMMEDIATELY — disconnect from the network",
+            "Do not pay the ransom — contact law enforcement and a forensics firm",
+            "Restore from clean offline backups",
+            "Identify and close the initial infection vector before reconnecting",
+        ],
+    },
+    "Malware / C2 Beacon": {
+        "severity": "Critical",
+        "description": "Malware or command-and-control beacon detected on a game server.",
+        "cves": [],
+        "remediation": [
+            "Isolate the affected host immediately",
+            "Run a full endpoint security scan",
+            "Block C2 IP addresses and domains at the firewall and DNS",
+            "Conduct a full forensic investigation of the affected system",
+        ],
+    },
+    "Privilege Escalation": {
+        "severity": "Critical",
+        "description": "An account is attempting to gain higher permissions than it is authorised for.",
+        "cves": [
+            {"id": "CVE-2022-21999", "description": "Windows Print Spooler privilege escalation (PrintNightmare variant)", "cvss": 7.8},
+        ],
+        "remediation": [
+            "Review and reduce sudo / admin group memberships immediately",
+            "Audit privilege-change events in system logs for the past 24 hours",
+            "Apply principle of least privilege across all service accounts",
+            "Patch OS and all software to current versions",
+        ],
+    },
+    "Phishing Attempt": {
+        "severity": "High",
+        "description": "Phishing or spear-phishing activity targeting staff or player accounts.",
+        "cves": [],
+        "remediation": [
+            "Block the phishing domain/IP at the email gateway and DNS",
+            "Alert potentially targeted users to change passwords",
+            "Run a phishing awareness reminder for staff",
+        ],
+    },
+    "Anomalous Baseline Traffic": {
+        "severity": "Low",
+        "description": "Traffic that looks normal but has a statistically unusual pattern detected by the ML IsolationForest model.",
+        "cves": [],
+        "remediation": [
+            "Monitor this source for 24 hours — low priority but worth tracking",
+            "Correlate with other events from the same source IP",
+        ],
+    },
+    "Zero-Day Anomaly": {
+        "severity": "Critical",
+        "description": "Behaviour with no matching known-attack signature — flagged by the IsolationForest as deviating from learned baseline.",
+        "cves": [
+            {"id": "CVE-UNKNOWN", "description": "Unclassified zero-day — no CVE assigned yet", "cvss": None},
+        ],
+        "remediation": [
+            "Escalate immediately to SOC Tier 2 — this is an unclassified threat",
+            "Isolate affected hosts pending forensic analysis",
+            "Capture full packet traces and process trees on the suspicious source",
+            "Consider reporting to CISA / NVD if a new vulnerability is confirmed",
+        ],
+    },
+    "Unknown Anomaly": {
+        "severity": "Medium",
+        "description": "Anomalous behaviour detected by ML that does not match any known attack pattern.",
+        "cves": [],
+        "remediation": [
+            "Review the raw log events manually",
+            "Escalate to SOC team for expert analysis",
+            "Enable enhanced logging on affected systems",
+        ],
+    },
+}
+
+
+def _graylog_rule_assessment(action: str, severity: str, event_type: str, msg: str) -> dict:
+    """
+    Derive what Graylog's existing rule set would classify this event as,
+    based purely on the structured fields that Graylog alert rules inspect.
+    """
+    a = (action or "").lower()
+    s = (severity or "info").lower()
+    m = (msg or "").lower()
+
+    if a in ("brute_force",) or ("brute" in m and "force" in m):
+        name = "SSH Brute Force"
+    elif a in ("credential_stuffing",) or "credential_stuff" in m:
+        name = "Credential Stuffing"
+    elif a in ("ddos_detected", "flood", "syn_flood") or "ddos" in m:
+        name = "DDoS Attack"
+    elif a in ("sql_injection",) or "sql" in m:
+        name = "SQL Injection"
+    elif a in ("xss_attack",) or "xss" in m or "cross-site" in m:
+        name = "XSS Attack"
+    elif a in ("lateral_movement",) or "lateral" in m:
+        name = "Lateral Movement"
+    elif a in ("privilege_escalation",) or "privilege" in m:
+        name = "Privilege Escalation"
+    elif a in ("data_exfiltration", "exfil") or "exfil" in m:
+        name = "Data Exfiltration"
+    elif a in ("port_scan", "reconnaissance") or "port scan" in m:
+        name = "Port Scan"
+    elif a in ("malware_detected", "ransomware") or "ransomware" in m:
+        name = "Malware / Ransomware"
+    elif a in ("failed", "failed_login", "suspicious_login") or "failed login" in m:
+        name = "Authentication Failure"
+    elif s in ("critical", "emergency"):
+        name = "Critical System Event"
+    elif s in ("high", "error"):
+        name = "High Severity Event"
+    else:
+        name = "Normal Traffic"
+
+    return {"name": name, "severity": s}
+
+
+_SEV_ORDER = {"info": 0, "low": 1, "warning": 1, "medium": 2, "error": 2, "high": 3, "critical": 4, "emergency": 5}
+
+
+def _compute_comparison_delta(
+    graylog_name: str, graylog_sev: str,
+    ml_name: str,     ml_sev: str,
+    is_zd: bool,      confidence: float,
+) -> str:
+    """Return a plain-English statement comparing what Graylog vs ML found."""
+    parts: list[str] = []
+
+    g_low = graylog_name.lower()
+    m_low = ml_name.lower()
+    names_match = (g_low == m_low) or (m_low in g_low) or (g_low in m_low)
+
+    g_lvl = _SEV_ORDER.get(graylog_sev, 0)
+    m_lvl = _SEV_ORDER.get(ml_sev, 0)
+
+    if is_zd:
+        parts.append(
+            f"ML flagged as zero-day anomaly — this pattern has no matching Graylog alert rule."
+        )
+        if not names_match:
+            parts.append(
+                f"Graylog classified it as '{graylog_name}' ({graylog_sev}), "
+                f"but ML identifies '{ml_name}' with {confidence:.0%} confidence."
+            )
+    else:
+        if not names_match:
+            parts.append(
+                f"Threat type mismatch: Graylog saw '{graylog_name}' but ML detected "
+                f"'{ml_name}' ({confidence:.0%} confidence)."
+            )
+
+    if m_lvl > g_lvl:
+        parts.append(
+            f"Severity escalated by ML: Graylog rated '{graylog_sev}' \u2192 ML rates '{ml_sev}'."
+        )
+    elif m_lvl < g_lvl and m_lvl > 0:
+        parts.append(
+            f"ML rates severity lower than Graylog ('{ml_sev}' vs '{graylog_sev}')."
+        )
+
+    if not parts:
+        parts.append(
+            f"Both Graylog and ML agree: '{ml_name}' at '{ml_sev}' severity. "
+            f"ML provided additional confidence ({confidence:.0%}) beyond rule-based detection."
+        )
+
+    return " ".join(parts)
+
+
+def _classify_threat_name(message: str, event_type: str = "", action: str = "") -> str:
+    """Classify a threat from message/event content into a human-readable threat name."""
+    combined = (message + " " + event_type + " " + action).lower()
+    for keywords, name in _THREAT_KEYWORDS:
+        if any(k in combined for k in keywords):
+            return name
+    # Fallback: use the action field directly
+    _action_fallback = {
+        "failed":              "Authentication Failure",
+        "brute_force":         "SSH Brute Force",
+        "credential_stuffing": "Credential Stuffing",
+        "ddos_detected":       "DDoS Attack",
+        "sql_injection":       "SQL Injection",
+        "suspicious_login":    "Authentication Failure",
+        "network_anomaly":     "Network Anomaly",
+    }
+    for k, v in _action_fallback.items():
+        if k in action.lower():
+            return v
+    return "Unknown Anomaly"
+
 
 # ---------------------------------------------------------------------------
 # CVE database (attack-type → CVE list)
@@ -126,9 +479,10 @@ _TOOLS = [
         "name": "search_graylog",
         "description": (
             "Search Graylog for log events matching a query. "
-            "Returns up to 50 events from the requested time window. "
+            "Can return up to 1000 events — use a higher limit for thorough investigations. "
             "Use Graylog query syntax: field:value, AND/OR, wildcards (*). "
-            "Examples: 'action:failed AND event_type:auth', 'severity:critical', '*'"
+            "Examples: 'action:failed AND event_type:auth', 'severity:critical', '*'. "
+            "Use from_timestamp and to_timestamp (ISO 8601) to query a specific time window."
         ),
         "input_schema": {
             "type": "object",
@@ -139,13 +493,21 @@ _TOOLS = [
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max events to return (1–50)",
-                    "default": 20
+                    "description": "Max events to return (1–1000, default 100)",
+                    "default": 100
                 },
                 "range_seconds": {
                     "type": "integer",
-                    "description": "Look-back window in seconds (default 3600 = 1 hour)",
+                    "description": "Look-back window in seconds (default 3600 = 1 hour). Ignored if from_timestamp is set.",
                     "default": 3600
+                },
+                "from_timestamp": {
+                    "type": "string",
+                    "description": "Start of time window in ISO 8601 format (e.g. '2026-04-22T10:00:00.000Z'). If set, to_timestamp is required."
+                },
+                "to_timestamp": {
+                    "type": "string",
+                    "description": "End of time window in ISO 8601 format. Required when from_timestamp is set."
                 }
             },
             "required": ["query"]
@@ -232,25 +594,32 @@ _TOOLS = [
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
-You are OmniLog, an expert AI security analyst embedded in the Catnip SIEM platform \
-(Graylog 6.1 + OpenSearch 2.15). You have live access to Graylog log data, \
-a machine-learning anomaly detector, and a CVE knowledge base.
+You are OmniLog, an AI security analyst for the Catnip Games SIEM platform \
+(Graylog 6.1 + OpenSearch 2.15). You have live access to Graylog logs, \
+an ML anomaly detector, and a CVE knowledge base.
 
-## Investigation protocol
+## How to write conversationalReply
+Write it like a briefing to a manager who is not a security expert:
+- Lead with the key finding in ONE plain sentence ("I found 47 failed SSH logins \
+  from one IP address in the last hour.")
+- Quantify: include counts, source IPs, time windows where available.
+- Use plain English: say "failed login attempt" not "auth failure"; \
+  "unusual outbound traffic" not "anomalous egress telemetry".
+- End with one clear action the reader should take.
+- Maximum 3 sentences total. No bullet points inside conversationalReply.
 
-1. Call search_graylog with a precise Graylog query derived from the user's intent.
-2. If events are returned, call score_events_ml on the top 20 events to get ML threat scores.
-3. If the ML scores reveal a clear threat class (brute_force, ddos, sql_injection, etc.) or a \
-zero-day anomaly (is_zero_day = true), call lookup_cves for that threat type.
-4. Synthesise all evidence and call produce_analysis exactly once as your final action.
+## Investigation steps
+1. Call search_graylog — request up to 1000 events to get a full picture. \
+   Use specific Graylog query syntax (field:value, AND/OR, wildcards).
+2. If events are returned, call score_events_ml on a representative sample of up to 20 events.
+3. If ML detects a clear threat type or zero-day (is_zero_day=true), call lookup_cves.
+4. Call produce_analysis ONCE as your final step — never call another tool after it.
 
 ## Rules
-
-- Always investigate with real tool calls — never answer from assumptions alone.
-- If Graylog returns 0 events, report that honestly in produce_analysis and set threatLevel to Low.
-- Keep conversationalReply short and direct (analyst briefing style).
-- recommendedActions must be concrete and prioritised (most urgent first).
-- Never fabricate log data or CVE numbers.
+- Always use real tool calls — never guess, never fabricate log entries or CVE numbers.
+- If Graylog returns 0 events, report that clearly and set threatLevel to Low.
+- recommendedActions must be numbered, concrete, and ordered most-urgent first.
+- summary should be 3–5 plain sentences suitable for an incident report.
 """
 
 # ---------------------------------------------------------------------------
@@ -265,33 +634,102 @@ _MAX_HISTORY = 40  # messages to retain per session (prevents unbounded growth)
 # Graylog helpers
 # ---------------------------------------------------------------------------
 
-def _graylog_search(q: str, limit: int = 20, range_s: int = 3600) -> list[dict]:
+def _normalize_ts(ts: str) -> str:
+    """Ensure a timestamp has milliseconds — Graylog absolute search requires .000Z."""
+    ts = ts.strip()
+    if ts.endswith("Z"):
+        body = ts[:-1]
+        if "." not in body:
+            ts = body + ".000Z"
+    elif "+" in ts:
+        # strip timezone offset and add .000Z
+        ts = ts.split("+")[0] + ".000Z"
+    return ts
+
+
+_GRAYLOG_FIELDS = (
+    "timestamp,source,level,message,event_type,action,"
+    "source_ip,severity,risk_score,confidence,"
+    "baseline_deviation,entropy,frequency_anomaly,sequence_anomaly"
+)
+
+
+def _graylog_search(
+    q: str,
+    limit: int = 100,
+    range_s: int = 3600,
+    from_ts: str | None = None,
+    to_ts: str | None = None,
+) -> list[dict]:
+    """Search Graylog. Supports relative range or absolute from/to timestamps."""
     try:
-        r = requests.get(
-            f"{GRAYLOG_BASE}/search/universal/relative",
-            params={
-                "query": q,
-                "range": range_s,
-                "limit": limit,
-                "fields": (
-                    "timestamp,source,level,message,event_type,action,"
-                    "source_ip,severity,risk_score,confidence,"
-                    "baseline_deviation,entropy,frequency_anomaly,sequence_anomaly"
-                ),
-            },
-            headers=_GL_HEADERS,
-            auth=_GL_AUTH,
-            timeout=_TIMEOUT,
-        )
+        if from_ts and to_ts:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/absolute",
+                params={
+                    "query": q,
+                    "from": _normalize_ts(from_ts),
+                    "to":   _normalize_ts(to_ts),
+                    "limit": min(limit, 1000),
+                    "fields": _GRAYLOG_FIELDS,
+                },
+                headers=_GL_HEADERS,
+                auth=_GL_AUTH,
+                timeout=max(_TIMEOUT, 20),
+            )
+        else:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/relative",
+                params={
+                    "query": q,
+                    "range": range_s,
+                    "limit": min(limit, 1000),
+                    "fields": _GRAYLOG_FIELDS,
+                },
+                headers=_GL_HEADERS,
+                auth=_GL_AUTH,
+                timeout=max(_TIMEOUT, 20),
+            )
         r.raise_for_status()
         return r.json().get("messages", [])
     except Exception:
         return []
 
+
+def _graylog_count(
+    q: str,
+    range_s: int = 3600,
+    from_ts: str | None = None,
+    to_ts: str | None = None,
+) -> int:
+    """Return total_results count — supports relative range or absolute from/to timestamps."""
+    try:
+        if from_ts and to_ts:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/absolute",
+                params={"query": q, "from": _normalize_ts(from_ts), "to": _normalize_ts(to_ts), "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
+        else:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/relative",
+                params={"query": q, "range": range_s, "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
+        r.raise_for_status()
+        return int(r.json().get("total_results", 0))
+    except Exception:
+        return 0
+
 def _graylog_alive() -> bool:
     try:
-        r = requests.get(f"{GRAYLOG_BASE}/system/lbstatus", timeout=3)
-        return r.status_code == 200
+        r = requests.get(
+            f"{GRAYLOG_BASE}/system",
+            auth=_GL_AUTH,
+            headers=_GL_HEADERS,
+            timeout=3,
+        )
+        return r.status_code == 200 and r.json().get("lb_status") == "alive"
     except Exception:
         return False
 
@@ -366,14 +804,31 @@ def _execute_tool(
     if tool_name == "search_graylog":
         raw = _graylog_search(
             tool_input["query"],
-            tool_input.get("limit", 20),
+            tool_input.get("limit", 100),
             tool_input.get("range_seconds", 3600),
+            tool_input.get("from_timestamp"),
+            tool_input.get("to_timestamp"),
         )
         state["log_entries"] = [_to_log_entry(m) for m in raw]
         state["raw_messages"] = raw
-        # Return a compact summary to Claude — not the full GELF dump
-        events_for_claude = [m.get("message", m) for m in raw[:15]]
-        return {"event_count": len(raw), "events": events_for_claude}, "search_graylog"
+        # Send a compact summary to Claude (not the full GELF dump)
+        # For large batches compress to key fields only
+        events_for_claude = []
+        for m in raw[:50]:
+            inner = m.get("message", m)
+            events_for_claude.append({
+                "ts":       inner.get("timestamp", ""),
+                "src":      inner.get("source", ""),
+                "msg":      (inner.get("message") or inner.get("short_message", ""))[:80],
+                "sev":      inner.get("severity", inner.get("level", "")),
+                "act":      inner.get("action", ""),
+                "evt":      inner.get("event_type", ""),
+            })
+        return {
+            "event_count": len(raw),
+            "events": events_for_claude,
+            "note": f"{len(raw)} events fetched — showing first 50 to Claude; all {len(raw)} available for ML scoring.",
+        }, "search_graylog"
 
     if tool_name == "score_events_ml":
         events = tool_input.get("events", [])
@@ -646,21 +1101,44 @@ def status():
     gl_ok = _graylog_alive()
     ml_ok = _ml_alive()
 
-    risk_score   = 42
+    risk_score   = 0
     alert_count  = 0
     total_events = 0
 
     if gl_ok:
         try:
+            # Total events in last hour
             r = requests.get(
                 f"{GRAYLOG_BASE}/search/universal/relative",
                 params={"query": "*", "range": 3600, "limit": 1},
                 headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
             )
             total_events = r.json().get("total_results", 0)
-            risk_score = min(100, int(total_events / 100))
         except Exception:
             pass
+
+        try:
+            # Active alerts = high/critical severity events + known attack actions
+            _ALERT_QUERY = (
+                "severity:(critical OR high OR emergency) OR "
+                "action:(brute_force OR ddos_detected OR sql_injection OR "
+                "credential_stuffing OR suspicious_login OR lateral_movement)"
+            )
+            ra = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/relative",
+                params={"query": _ALERT_QUERY, "range": 3600, "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
+            alert_count = ra.json().get("total_results", 0)
+        except Exception:
+            pass
+
+        # Risk score: blend alert density and total volume
+        if total_events > 0:
+            alert_ratio = alert_count / total_events
+            volume_score = min(50, int(total_events / 200))
+            alert_score  = min(50, int(alert_ratio * 500))
+            risk_score   = min(100, volume_score + alert_score)
 
     return jsonify({
         "graylog_connected":      gl_ok,
@@ -701,6 +1179,398 @@ def clear_session(session_id: str):
     with _sessions_lock:
         _sessions.pop(session_id, None)
     return jsonify({"status": "cleared", "sessionId": session_id})
+
+
+@app.get("/zero-day-alerts")
+def zero_day_alerts():
+    """
+    Scan recent Graylog events through the ML models and return threats that
+    Graylog rules would miss: IsolationForest zero-day anomalies and
+    high-risk ML predictions from unexpected behaviour patterns.
+
+    Also auto-trains the IsolationForest if it hasn't been trained yet.
+    """
+    ZD_THRESH = -0.05  # mirrors ZeroDayDetector.DEFAULT_THRESHOLD
+    if not _graylog_alive():
+        return jsonify({"error": "Graylog not connected", "threats": []}), 503
+
+    raw = _graylog_search("*", limit=200, range_s=3600)
+    if not raw:
+        return jsonify({
+            "total_scanned": 0, "zero_day_count": 0,
+            "model_trained": False, "threats": [],
+        })
+
+    events = [m.get("message", m) for m in raw]
+
+    # Check zero-day model status and auto-train if needed
+    zd_trained = False
+    try:
+        h = requests.get(f"{ML_URL}/health", timeout=3)
+        zd_trained = h.json().get("zero_day_model") == "loaded"
+    except Exception:
+        pass
+
+    if not zd_trained and len(events) >= 10:
+        try:
+            requests.post(
+                f"{ML_URL}/train/zero-day",
+                json={"platform": "graylog", "events": events, "contamination": 0.05},
+                timeout=30,
+            )
+            zd_trained = True
+        except Exception:
+            pass
+
+    # Batch-score all events
+    try:
+        sr = requests.post(
+            f"{ML_URL}/predict/batch",
+            json={"platform": "graylog", "events": events},
+            timeout=20,
+        )
+        sr.raise_for_status()
+        predictions = sr.json().get("results", [])
+    except Exception as exc:
+        return jsonify({"error": f"ML service error: {exc}", "threats": []}), 503
+
+    threats = []
+    for i, (msg, pred) in enumerate(zip(raw[:len(predictions)], predictions)):
+        inner     = msg.get("message", msg)
+        is_zd     = pred.get("is_zero_day", False)
+        combined  = pred.get("combined_risk", 0.0)
+        zd_score  = pred.get("zero_day_score", 0.0)
+        severity  = pred.get("ml_severity", "info")
+        confidence = pred.get("ml_confidence", 0.0)
+
+        # Only surface: confirmed zero-days OR high combined-risk threats
+        if not is_zd and combined < 0.55:
+            continue
+
+        msg_text  = inner.get("message") or inner.get("short_message", "")
+        evt_type  = inner.get("event_type", "")
+        action    = inner.get("action", "")
+        raw_sev   = inner.get("severity") or inner.get("level", "info")
+
+        # ML classification
+        ml_name = _classify_threat_name(msg_text, evt_type, action)
+        if is_zd and ml_name == "Unknown Anomaly":
+            ml_name = "Zero-Day Anomaly"
+        threat_name = ml_name
+        details = _THREAT_DETAILS.get(threat_name, _THREAT_DETAILS.get("Unknown Anomaly", {"description": "", "cves": [], "remediation": []}))
+
+        if is_zd:
+            description = (
+                f"{details['description']} "
+                f"IsolationForest anomaly score: {zd_score:.2f} (threshold {ZD_THRESH:.2f})."
+            )
+        elif severity in ("critical", "high"):
+            description = (
+                f"{details['description']} "
+                f"ML confidence: {confidence:.0%} — pattern not captured by existing Graylog rules."
+            )
+        else:
+            description = f"{details['description']} Combined risk score: {combined:.2f}."
+
+        # Graylog rule-based assessment vs ML assessment comparison
+        graylog_assess = _graylog_rule_assessment(action, str(raw_sev), evt_type, msg_text)
+        delta = _compute_comparison_delta(
+            graylog_assess["name"], graylog_assess["severity"],
+            ml_name, severity, is_zd, confidence,
+        )
+
+        threats.append({
+            "id":            inner.get("_id", str(i)),
+            "timestamp":     inner.get("timestamp", ""),
+            "source":        inner.get("source", inner.get("gl2_source_input", "unknown")),
+            "message":       msg_text[:120],
+            "zero_day_score": round(zd_score, 3),
+            "combined_risk":  round(combined, 3),
+            "ml_severity":    severity,
+            "attack_type":    threat_name,
+            "description":    description,
+            "is_zero_day":    is_zd,
+            "cves":           details.get("cves", []),
+            "remediation":    details.get("remediation", []),
+            "graylog_assessment": graylog_assess,
+            "ml_assessment": {
+                "name":        ml_name,
+                "severity":    severity,
+                "confidence":  round(confidence, 3),
+                "is_zero_day": is_zd,
+            },
+            "comparison": {"delta": delta},
+        })
+
+    threats.sort(key=lambda t: t["combined_risk"], reverse=True)
+    threats = threats[:20]
+
+    return jsonify({
+        "total_scanned":  len(predictions),
+        "zero_day_count": sum(1 for t in threats if t["is_zero_day"]),
+        "model_trained":  zd_trained,
+        "threats":        threats,
+    })
+
+
+_DASHBOARD_CATEGORIES = {
+    "failed_logins": {
+        "label": "Failed Logins",
+        "query": '"failed login" OR "login failed" OR action:failed OR action:brute_force OR action:credential_stuffing',
+    },
+    "errors": {
+        "label": "Errors",
+        "query": "severity:(error OR critical OR emergency) OR level:(0 OR 1 OR 2 OR 3)",
+    },
+    "network_activity": {
+        "label": "Network Activity",
+        "query": 'event_type:network OR event_type:firewall OR event_type:dns OR "traffic" OR "network"',
+    },
+    "suspicious_behaviour": {
+        "label": "Suspicious Behaviour",
+        "query": (
+            "action:(ddos_detected OR sql_injection OR suspicious_login OR port_scan OR lateral_movement) "
+            'OR "suspicious" OR "anomaly" OR "ddos" OR severity:high'
+        ),
+    },
+}
+
+
+@app.get("/dashboard-counts")
+def dashboard_counts():
+    """
+    Return event counts and recent events for all sidebar filter categories.
+    Used to populate count badges and dropdown previews.
+    """
+    if not _graylog_alive():
+        return jsonify({"error": "Graylog not connected"}), 503
+
+    result = {}
+    for key, cat in _DASHBOARD_CATEGORIES.items():
+        count = _graylog_count(cat["query"])
+        raw   = _graylog_search(cat["query"], limit=8)
+        events = []
+        for m in raw:
+            inner = m.get("message", m)
+            msg_text = (inner.get("message") or inner.get("short_message", ""))[:100]
+            events.append({
+                "timestamp": inner.get("timestamp", ""),
+                "source":    inner.get("source", "unknown"),
+                "message":   msg_text,
+                "severity":  str(inner.get("severity", inner.get("level", "info"))).lower(),
+                "action":    inner.get("action", ""),
+                "event_type": inner.get("event_type", ""),
+                "threat_name": _classify_threat_name(
+                    msg_text, inner.get("event_type", ""), inner.get("action", "")
+                ),
+            })
+        result[key] = {"count": count, "label": cat["label"], "events": events}
+
+    return jsonify(result)
+
+
+@app.get("/report")
+def generate_report():
+    """
+    Generate a comprehensive security report.
+
+    Query params:
+      from_ts   ISO 8601 start timestamp (optional — defaults to 1 hour ago)
+      to_ts     ISO 8601 end timestamp   (optional — defaults to now)
+
+    Analyses up to 10,000 log events, scores a representative ML sample,
+    maps findings to CVEs, and returns a prioritised remediation plan.
+    """
+    import datetime as _dt
+
+    if not _graylog_alive():
+        return jsonify({"error": "Graylog not connected"}), 503
+
+    from_ts = request.args.get("from_ts") or None
+    to_ts   = request.args.get("to_ts")   or None
+
+    now_utc = _dt.datetime.utcnow()
+    now_str = now_utc.isoformat(timespec="seconds") + "Z"
+
+    if from_ts and to_ts:
+        try:
+            _from_dt = _dt.datetime.fromisoformat(from_ts.rstrip("Z"))
+            _to_dt   = _dt.datetime.fromisoformat(to_ts.rstrip("Z"))
+            period_label = (
+                f"{_from_dt.strftime('%Y-%m-%d %H:%M')} → "
+                f"{_to_dt.strftime('%Y-%m-%d %H:%M')} UTC"
+            )
+        except Exception:
+            period_label = f"{from_ts} → {to_ts}"
+    else:
+        period_label = "Last 1 hour"
+        from_ts = to_ts = None  # use relative range
+
+    def _count(q: str) -> int:
+        return _graylog_count(q, range_s=3600, from_ts=from_ts, to_ts=to_ts)
+
+    def _search(q: str, limit: int = 200) -> list[dict]:
+        return _graylog_search(q, limit=limit, range_s=3600, from_ts=from_ts, to_ts=to_ts)
+
+    # --- overall stats (10 k scan) ---
+    total_events = _count("*")
+
+    # --- per-category counts and sample events ---
+    categories = []
+    all_sample_messages: list[dict] = []
+    all_sources: list[str] = []
+
+    for key, cat in _DASHBOARD_CATEGORIES.items():
+        count = _count(cat["query"])
+        # Fetch up to 200 samples per category for threat analysis
+        raw   = _search(cat["query"], limit=200)
+        samples = []
+        for m in raw:
+            inner = m.get("message", m)
+            msg_text = (inner.get("message") or inner.get("short_message", ""))[:120]
+            source   = inner.get("source", "unknown")
+            action   = inner.get("action", "")
+            evt_type = inner.get("event_type", "")
+            all_sources.append(source)
+            all_sample_messages.append(inner)
+            samples.append({
+                "timestamp": inner.get("timestamp", ""),
+                "source":    source,
+                "message":   msg_text,
+                "severity":  str(inner.get("severity", inner.get("level", "info"))).lower(),
+                "threat_name": _classify_threat_name(msg_text, evt_type, action),
+            })
+
+        # Tally threat types in this category
+        threat_counts: dict[str, int] = {}
+        for s in samples:
+            n = s["threat_name"]
+            threat_counts[n] = threat_counts.get(n, 0) + 1
+        dominant = max(threat_counts, key=threat_counts.get) if threat_counts else "Unknown"
+        details  = _THREAT_DETAILS.get(dominant, _THREAT_DETAILS["Unknown Anomaly"])
+
+        # Unique threat breakdown for the category
+        threat_breakdown = [
+            {"name": n, "count": c}
+            for n, c in sorted(threat_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+        categories.append({
+            "key":              key,
+            "label":            cat["label"],
+            "count":            count,
+            "dominant_threat":  dominant,
+            "severity":         details["severity"],
+            "description":      details["description"],
+            "cves":             details["cves"],
+            "remediation":      details["remediation"],
+            "sample_events":    samples[:8],
+            "threat_breakdown": threat_breakdown[:5],
+        })
+
+    # --- ML scan: score a representative sample (up to 200 events) ---
+    ml_summary = {"status": "unavailable", "zero_day_count": 0, "high_risk_count": 0}
+    if _ml_alive() and all_sample_messages:
+        # Batch-score via ML service for efficiency
+        try:
+            sample_for_ml = all_sample_messages[:200]
+            sr = requests.post(
+                f"{ML_URL}/predict/batch",
+                json={"platform": "graylog", "events": sample_for_ml},
+                timeout=30,
+            )
+            sr.raise_for_status()
+            predictions = sr.json().get("results", [])
+        except Exception:
+            predictions = []
+            for e in all_sample_messages[:50]:
+                p = _ml_predict(e)
+                if p:
+                    predictions.append(p)
+
+        zd_count   = sum(1 for p in predictions if p.get("is_zero_day"))
+        high_count = sum(1 for p in predictions if p.get("ml_severity") in ("critical", "high"))
+        ml_summary = {
+            "status":          "active",
+            "events_scored":   len(predictions),
+            "zero_day_count":  zd_count,
+            "high_risk_count": high_count,
+            "anomaly_rate":    round(zd_count / max(len(predictions), 1), 3),
+        }
+
+    # --- top sources ---
+    source_freq: dict[str, int] = {}
+    for s in all_sources:
+        if s and s != "unknown":
+            source_freq[s] = source_freq.get(s, 0) + 1
+    top_sources = [
+        {"source": s, "event_count": c}
+        for s, c in sorted(source_freq.items(), key=lambda x: x[1], reverse=True)[:10]
+    ]
+
+    # --- unified CVE list (deduplicated) ---
+    seen_cves: set[str] = set()
+    all_cves: list[dict] = []
+    for cat in categories:
+        for cve in cat["cves"]:
+            if cve["id"] not in seen_cves:
+                seen_cves.add(cve["id"])
+                all_cves.append({**cve, "related_threat": cat["dominant_threat"]})
+
+    # --- consolidated remediation (ordered by severity) ---
+    sev_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+    sorted_cats = sorted(categories, key=lambda c: sev_order.get(c["severity"], 9))
+    remediation_plan: list[dict] = []
+    for cat in sorted_cats:
+        if cat["count"] > 0 and cat["remediation"]:
+            remediation_plan.append({
+                "threat":     cat["dominant_threat"],
+                "severity":   cat["severity"],
+                "count":      cat["count"],
+                "steps":      cat["remediation"],
+            })
+
+    # --- overall threat level ---
+    if any(c["severity"] == "Critical" and c["count"] > 0 for c in categories):
+        overall_level = "Critical"
+    elif any(c["severity"] == "High" and c["count"] > 0 for c in categories):
+        overall_level = "High"
+    elif any(c["severity"] == "Medium" and c["count"] > 0 for c in categories):
+        overall_level = "Medium"
+    else:
+        overall_level = "Low"
+
+    failed_logins_count = next((c["count"] for c in categories if c["key"] == "failed_logins"), 0)
+    suspicious_count    = next((c["count"] for c in categories if c["key"] == "suspicious_behaviour"), 0)
+
+    executive_summary = (
+        f"In the last hour, OmniLog processed {total_events:,} log events across all game servers. "
+        f"The overall threat level is {overall_level}. "
+        f"Notable findings: {failed_logins_count:,} failed login events and "
+        f"{suspicious_count:,} suspicious-behaviour events were recorded. "
+        f"The ML anomaly engine scored {ml_summary.get('events_scored', 0)} events, "
+        f"flagging {ml_summary.get('zero_day_count', 0)} zero-day anomalies and "
+        f"{ml_summary.get('high_risk_count', 0)} high-risk patterns. "
+        f"Immediate action is recommended for all Critical and High severity findings below."
+    )
+
+    return jsonify({
+        "generated_at":       now_str,
+        "period":             period_label,
+        "overall_threat_level": overall_level,
+        "executive_summary":  executive_summary,
+        "statistics": {
+            "total_events":        total_events,
+            "failed_logins":       failed_logins_count,
+            "suspicious_events":   suspicious_count,
+            "unique_sources":      len(source_freq),
+        },
+        "categories":         categories,
+        "ml_analysis":        ml_summary,
+        "cve_mappings":       all_cves,
+        "remediation_plan":   remediation_plan,
+        "top_sources":        top_sources,
+    })
 
 
 # ---------------------------------------------------------------------------
