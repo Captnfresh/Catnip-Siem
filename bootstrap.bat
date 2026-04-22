@@ -346,15 +346,27 @@ if %ERRORLEVEL% equ 0 (
     echo [WARN] Could not install OmniLog deps - run: pip install -r ml\requirements.txt
 )
 
+REM Check model file
+set ML_SKIP=0
+if not exist "models\catnip_severity_model.pkl" (
+    echo [WARN] ML model not found: models\catnip_severity_model.pkl
+    echo        Skipping ML service - train in notebooks\catnip_ml_trainer.ipynb and copy .pkl to models\
+    set ML_SKIP=1
+) else (
+    echo [OK] ML model found
+)
+
 REM Kill any stale instances
 taskkill /F /FI "WINDOWTITLE eq ml_service*" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq omnilog_api*" >nul 2>&1
 timeout /t 1 /nobreak >nul 2>&1
 
-echo [..] Starting ML service (port 5001)...
-start "ml_service" /B python scripts\ml_service.py > logs\ml_service.log 2>&1
-timeout /t 3 /nobreak >nul 2>&1
-echo [OK] ML service started
+if %ML_SKIP% equ 0 (
+    echo [..] Starting ML service (port 5001)...
+    start "ml_service" /B python scripts\ml_service.py > logs\ml_service.log 2>&1
+    timeout /t 3 /nobreak >nul 2>&1
+    echo [OK] ML service started
+)
 
 echo [..] Starting OmniLog API (port 5002)...
 start "omnilog_api" /B python scripts\omnilog_api.py > logs\omnilog_api.log 2>&1

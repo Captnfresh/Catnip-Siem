@@ -418,20 +418,32 @@ python3 -m pip install -r "$(dirname "$0")/ml/requirements.txt" --quiet 2>/dev/n
 warn "Could not install OmniLog dependencies — run: pip3 install -r ml/requirements.txt"
 ok "OmniLog Python dependencies ready"
 
+# Check model file exists
+MODEL_FILE="$(dirname "$0")/models/catnip_severity_model.pkl"
+if [ ! -f "$MODEL_FILE" ]; then
+    warn "ML model not found: $MODEL_FILE"
+    warn "Skipping ML service — train the model in notebooks/catnip_ml_trainer.ipynb and copy the .pkl to models/"
+    ML_SKIP=1
+else
+    ok "ML model found"
+    ML_SKIP=0
+fi
+
 # Kill any stale instances
 pkill -f "ml_service.py" 2>/dev/null || true
 pkill -f "omnilog_api.py" 2>/dev/null || true
 sleep 1
 
-info "Starting ML service (port 5001)..."
-nohup python3 "$SCRIPTS_DIR/ml_service.py" > "$ML_LOG" 2>&1 &
-ML_PID=$!
-sleep 3
-
-if kill -0 "$ML_PID" 2>/dev/null; then
-    ok "ML service running (PID: $ML_PID)"
-else
-    warn "ML service failed to start. Check: $ML_LOG"
+if [ "$ML_SKIP" -eq 0 ]; then
+    info "Starting ML service (port 5001)..."
+    nohup python3 "$SCRIPTS_DIR/ml_service.py" > "$ML_LOG" 2>&1 &
+    ML_PID=$!
+    sleep 3
+    if kill -0 "$ML_PID" 2>/dev/null; then
+        ok "ML service running (PID: $ML_PID)"
+    else
+        warn "ML service failed to start. Check: $ML_LOG"
+    fi
 fi
 
 info "Starting OmniLog API (port 5002)..."

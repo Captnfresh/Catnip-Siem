@@ -18,3 +18,6 @@ Thumbs.db
 logs/
 reports/
 geomap/attacks.json
+
+# ML model binaries (large files — copy from Google Colab after training)
+models/*.pkl

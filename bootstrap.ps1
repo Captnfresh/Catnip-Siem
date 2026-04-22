@@ -377,23 +377,36 @@ try {
     Write-Warn "Could not install OmniLog deps. Run manually: pip install -r ml\requirements.txt"
 }
 
+# Check model file
+$modelFile = Join-Path $SCRIPT_DIR "models\catnip_severity_model.pkl"
+$mlSkip = $false
+if (-not (Test-Path $modelFile)) {
+    Write-Warn "ML model not found: $modelFile"
+    Write-Host "       Skipping ML service — train in notebooks\catnip_ml_trainer.ipynb and copy the .pkl to models\" -ForegroundColor Yellow
+    $mlSkip = $true
+} else {
+    Write-Ok "ML model found"
+}
+
 # Kill any stale instances
 Get-Process python* -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -match "ml_service|omnilog_api" } |
     Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
-Write-Info "Starting ML service (port 5001)..."
-$mlProcess = Start-Process python `
-    -ArgumentList (Join-Path $SCRIPTS_DIR "ml_service.py") `
-    -RedirectStandardOutput $mlLog `
-    -RedirectStandardError "$LOGS_DIR\ml_service_error.log" `
-    -WindowStyle Hidden -PassThru
-Start-Sleep -Seconds 3
-if (-not $mlProcess.HasExited) {
-    Write-Ok "ML service running (PID: $($mlProcess.Id))"
-} else {
-    Write-Warn "ML service failed to start. Check: $mlLog"
+if (-not $mlSkip) {
+    Write-Info "Starting ML service (port 5001)..."
+    $mlProcess = Start-Process python `
+        -ArgumentList (Join-Path $SCRIPTS_DIR "ml_service.py") `
+        -RedirectStandardOutput $mlLog `
+        -RedirectStandardError "$LOGS_DIR\ml_service_error.log" `
+        -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 3
+    if (-not $mlProcess.HasExited) {
+        Write-Ok "ML service running (PID: $($mlProcess.Id))"
+    } else {
+        Write-Warn "ML service failed to start. Check: $mlLog"
+    }
 }
 
 Write-Info "Starting OmniLog API (port 5002)..."
