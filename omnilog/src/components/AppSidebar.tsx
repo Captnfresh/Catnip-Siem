@@ -9,7 +9,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import RiskGauge from "./RiskGauge";
-import PrintReport from "./PrintReport";
 import {
   fetchStatus, fetchDashboardCounts, fetchZeroDayAlerts,
   type StatusResponse, type DashboardCounts, type DashboardEvent,
@@ -447,8 +446,7 @@ const AppSidebar = ({ onQuickFilter }: AppSidebarProps) => {
         </SidebarGroup>
 
         {/* Footer */}
-        <div className="mt-auto p-4 border-t border-border space-y-2">
-          <PrintReport />
+        <div className="mt-auto p-4 border-t border-border">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Shield className="h-3 w-3" />
             <span className="font-mono">OmniLog v1.0</span>

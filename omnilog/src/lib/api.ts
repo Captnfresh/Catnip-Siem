@@ -100,6 +100,7 @@ export interface ReportCategory {
   cves: ReportCve[];
   remediation: string[];
   sample_events: DashboardEvent[];
+  threat_breakdown: { name: string; count: number }[];
 }
 
 export interface RemediationItem {
@@ -133,10 +134,14 @@ export interface ReportData {
   top_sources: { source: string; event_count: number }[];
 }
 
-export async function fetchReport(): Promise<ReportData> {
-  const res = await fetch(`${BASE}/report`, {
-    signal: AbortSignal.timeout(30000),
-  });
+export async function fetchReport(params?: {
+  fromTs?: string;
+  toTs?: string;
+}): Promise<ReportData> {
+  const url = new URL("/omnilog-api/report", window.location.origin);
+  if (params?.fromTs) url.searchParams.set("from_ts", params.fromTs);
+  if (params?.toTs)   url.searchParams.set("to_ts",   params.toTs);
+  const res = await fetch(url.toString(), { signal: AbortSignal.timeout(90000) });
   if (!res.ok) throw new Error(`Status ${res.status}`);
   return res.json();
 }

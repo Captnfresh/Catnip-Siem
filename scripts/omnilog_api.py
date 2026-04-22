@@ -541,6 +541,19 @@ _MAX_HISTORY = 40  # messages to retain per session (prevents unbounded growth)
 # Graylog helpers
 # ---------------------------------------------------------------------------
 
+def _normalize_ts(ts: str) -> str:
+    """Ensure a timestamp has milliseconds — Graylog absolute search requires .000Z."""
+    ts = ts.strip()
+    if ts.endswith("Z"):
+        body = ts[:-1]
+        if "." not in body:
+            ts = body + ".000Z"
+    elif "+" in ts:
+        # strip timezone offset and add .000Z
+        ts = ts.split("+")[0] + ".000Z"
+    return ts
+
+
 _GRAYLOG_FIELDS = (
     "timestamp,source,level,message,event_type,action,"
     "source_ip,severity,risk_score,confidence,"
@@ -562,8 +575,8 @@ def _graylog_search(
                 f"{GRAYLOG_BASE}/search/universal/absolute",
                 params={
                     "query": q,
-                    "from": from_ts,
-                    "to": to_ts,
+                    "from": _normalize_ts(from_ts),
+                    "to":   _normalize_ts(to_ts),
                     "limit": min(limit, 1000),
                     "fields": _GRAYLOG_FIELDS,
                 },
@@ -590,16 +603,26 @@ def _graylog_search(
         return []
 
 
-def _graylog_count(q: str, range_s: int = 3600) -> int:
-    """Return the total_results count for a query without fetching messages."""
+def _graylog_count(
+    q: str,
+    range_s: int = 3600,
+    from_ts: str | None = None,
+    to_ts: str | None = None,
+) -> int:
+    """Return total_results count — supports relative range or absolute from/to timestamps."""
     try:
-        r = requests.get(
-            f"{GRAYLOG_BASE}/search/universal/relative",
-            params={"query": q, "range": range_s, "limit": 1},
-            headers=_GL_HEADERS,
-            auth=_GL_AUTH,
-            timeout=_TIMEOUT,
-        )
+        if from_ts and to_ts:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/absolute",
+                params={"query": q, "from": _normalize_ts(from_ts), "to": _normalize_ts(to_ts), "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
+        else:
+            r = requests.get(
+                f"{GRAYLOG_BASE}/search/universal/relative",
+                params={"query": q, "range": range_s, "limit": 1},
+                headers=_GL_HEADERS, auth=_GL_AUTH, timeout=_TIMEOUT,
+            )
         r.raise_for_status()
         return int(r.json().get("total_results", 0))
     except Exception:
@@ -1218,19 +1241,48 @@ def dashboard_counts():
 @app.get("/report")
 def generate_report():
     """
-    Generate a comprehensive security report covering the last hour.
-    Includes statistics, per-category threat analysis, ML findings,
-    CVE mappings, and a prioritised remediation plan.
+    Generate a comprehensive security report.
+
+    Query params:
+      from_ts   ISO 8601 start timestamp (optional — defaults to 1 hour ago)
+      to_ts     ISO 8601 end timestamp   (optional — defaults to now)
+
+    Analyses up to 10,000 log events, scores a representative ML sample,
+    maps findings to CVEs, and returns a prioritised remediation plan.
     """
     import datetime as _dt
 
     if not _graylog_alive():
         return jsonify({"error": "Graylog not connected"}), 503
 
-    now_str = _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    from_ts = request.args.get("from_ts") or None
+    to_ts   = request.args.get("to_ts")   or None
 
-    # --- overall stats ---
-    total_events = _graylog_count("*")
+    now_utc = _dt.datetime.utcnow()
+    now_str = now_utc.isoformat(timespec="seconds") + "Z"
+
+    if from_ts and to_ts:
+        try:
+            _from_dt = _dt.datetime.fromisoformat(from_ts.rstrip("Z"))
+            _to_dt   = _dt.datetime.fromisoformat(to_ts.rstrip("Z"))
+            period_label = (
+                f"{_from_dt.strftime('%Y-%m-%d %H:%M')} → "
+                f"{_to_dt.strftime('%Y-%m-%d %H:%M')} UTC"
+            )
+        except Exception:
+            period_label = f"{from_ts} → {to_ts}"
+    else:
+        period_label = "Last 1 hour"
+        from_ts = to_ts = None  # use relative range
+
+    def _count(q: str) -> int:
+        return _graylog_count(q, range_s=3600, from_ts=from_ts, to_ts=to_ts)
+
+    def _search(q: str, limit: int = 200) -> list[dict]:
+        return _graylog_search(q, limit=limit, range_s=3600, from_ts=from_ts, to_ts=to_ts)
+
+    # --- overall stats (10 k scan) ---
+    total_events = _count("*")
 
     # --- per-category counts and sample events ---
     categories = []
@@ -1238,8 +1290,9 @@ def generate_report():
     all_sources: list[str] = []
 
     for key, cat in _DASHBOARD_CATEGORIES.items():
-        count = _graylog_count(cat["query"])
-        raw   = _graylog_search(cat["query"], limit=20)
+        count = _count(cat["query"])
+        # Fetch up to 200 samples per category for threat analysis
+        raw   = _search(cat["query"], limit=200)
         samples = []
         for m in raw:
             inner = m.get("message", m)
@@ -1257,7 +1310,7 @@ def generate_report():
                 "threat_name": _classify_threat_name(msg_text, evt_type, action),
             })
 
-        # Determine dominant threat type in this category
+        # Tally threat types in this category
         threat_counts: dict[str, int] = {}
         for s in samples:
             n = s["threat_name"]
@@ -1265,26 +1318,45 @@ def generate_report():
         dominant = max(threat_counts, key=threat_counts.get) if threat_counts else "Unknown"
         details  = _THREAT_DETAILS.get(dominant, _THREAT_DETAILS["Unknown Anomaly"])
 
+        # Unique threat breakdown for the category
+        threat_breakdown = [
+            {"name": n, "count": c}
+            for n, c in sorted(threat_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
+
         categories.append({
-            "key":           key,
-            "label":         cat["label"],
-            "count":         count,
-            "dominant_threat": dominant,
-            "severity":      details["severity"],
-            "description":   details["description"],
-            "cves":          details["cves"],
-            "remediation":   details["remediation"],
-            "sample_events": samples[:5],
+            "key":              key,
+            "label":            cat["label"],
+            "count":            count,
+            "dominant_threat":  dominant,
+            "severity":         details["severity"],
+            "description":      details["description"],
+            "cves":             details["cves"],
+            "remediation":      details["remediation"],
+            "sample_events":    samples[:8],
+            "threat_breakdown": threat_breakdown[:5],
         })
 
-    # --- ML scan summary ---
+    # --- ML scan: score a representative sample (up to 200 events) ---
     ml_summary = {"status": "unavailable", "zero_day_count": 0, "high_risk_count": 0}
     if _ml_alive() and all_sample_messages:
-        predictions: list[dict] = []
-        for e in all_sample_messages[:50]:
-            p = _ml_predict(e)
-            if p:
-                predictions.append(p)
+        # Batch-score via ML service for efficiency
+        try:
+            sample_for_ml = all_sample_messages[:200]
+            sr = requests.post(
+                f"{ML_URL}/predict/batch",
+                json={"platform": "graylog", "events": sample_for_ml},
+                timeout=30,
+            )
+            sr.raise_for_status()
+            predictions = sr.json().get("results", [])
+        except Exception:
+            predictions = []
+            for e in all_sample_messages[:50]:
+                p = _ml_predict(e)
+                if p:
+                    predictions.append(p)
+
         zd_count   = sum(1 for p in predictions if p.get("is_zero_day"))
         high_count = sum(1 for p in predictions if p.get("ml_severity") in ("critical", "high"))
         ml_summary = {
@@ -1353,7 +1425,7 @@ def generate_report():
 
     return jsonify({
         "generated_at":       now_str,
-        "period":             "Last 1 hour",
+        "period":             period_label,
         "overall_threat_level": overall_level,
         "executive_summary":  executive_summary,
         "statistics": {
