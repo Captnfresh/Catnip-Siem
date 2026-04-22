@@ -321,6 +321,99 @@ _THREAT_DETAILS: dict[str, dict] = {
 }
 
 
+def _graylog_rule_assessment(action: str, severity: str, event_type: str, msg: str) -> dict:
+    """
+    Derive what Graylog's existing rule set would classify this event as,
+    based purely on the structured fields that Graylog alert rules inspect.
+    """
+    a = (action or "").lower()
+    s = (severity or "info").lower()
+    m = (msg or "").lower()
+
+    if a in ("brute_force",) or ("brute" in m and "force" in m):
+        name = "SSH Brute Force"
+    elif a in ("credential_stuffing",) or "credential_stuff" in m:
+        name = "Credential Stuffing"
+    elif a in ("ddos_detected", "flood", "syn_flood") or "ddos" in m:
+        name = "DDoS Attack"
+    elif a in ("sql_injection",) or "sql" in m:
+        name = "SQL Injection"
+    elif a in ("xss_attack",) or "xss" in m or "cross-site" in m:
+        name = "XSS Attack"
+    elif a in ("lateral_movement",) or "lateral" in m:
+        name = "Lateral Movement"
+    elif a in ("privilege_escalation",) or "privilege" in m:
+        name = "Privilege Escalation"
+    elif a in ("data_exfiltration", "exfil") or "exfil" in m:
+        name = "Data Exfiltration"
+    elif a in ("port_scan", "reconnaissance") or "port scan" in m:
+        name = "Port Scan"
+    elif a in ("malware_detected", "ransomware") or "ransomware" in m:
+        name = "Malware / Ransomware"
+    elif a in ("failed", "failed_login", "suspicious_login") or "failed login" in m:
+        name = "Authentication Failure"
+    elif s in ("critical", "emergency"):
+        name = "Critical System Event"
+    elif s in ("high", "error"):
+        name = "High Severity Event"
+    else:
+        name = "Normal Traffic"
+
+    return {"name": name, "severity": s}
+
+
+_SEV_ORDER = {"info": 0, "low": 1, "warning": 1, "medium": 2, "error": 2, "high": 3, "critical": 4, "emergency": 5}
+
+
+def _compute_comparison_delta(
+    graylog_name: str, graylog_sev: str,
+    ml_name: str,     ml_sev: str,
+    is_zd: bool,      confidence: float,
+) -> str:
+    """Return a plain-English statement comparing what Graylog vs ML found."""
+    parts: list[str] = []
+
+    g_low = graylog_name.lower()
+    m_low = ml_name.lower()
+    names_match = (g_low == m_low) or (m_low in g_low) or (g_low in m_low)
+
+    g_lvl = _SEV_ORDER.get(graylog_sev, 0)
+    m_lvl = _SEV_ORDER.get(ml_sev, 0)
+
+    if is_zd:
+        parts.append(
+            f"ML flagged as zero-day anomaly — this pattern has no matching Graylog alert rule."
+        )
+        if not names_match:
+            parts.append(
+                f"Graylog classified it as '{graylog_name}' ({graylog_sev}), "
+                f"but ML identifies '{ml_name}' with {confidence:.0%} confidence."
+            )
+    else:
+        if not names_match:
+            parts.append(
+                f"Threat type mismatch: Graylog saw '{graylog_name}' but ML detected "
+                f"'{ml_name}' ({confidence:.0%} confidence)."
+            )
+
+    if m_lvl > g_lvl:
+        parts.append(
+            f"Severity escalated by ML: Graylog rated '{graylog_sev}' \u2192 ML rates '{ml_sev}'."
+        )
+    elif m_lvl < g_lvl and m_lvl > 0:
+        parts.append(
+            f"ML rates severity lower than Graylog ('{ml_sev}' vs '{graylog_sev}')."
+        )
+
+    if not parts:
+        parts.append(
+            f"Both Graylog and ML agree: '{ml_name}' at '{ml_sev}' severity. "
+            f"ML provided additional confidence ({confidence:.0%}) beyond rule-based detection."
+        )
+
+    return " ".join(parts)
+
+
 def _classify_threat_name(message: str, event_type: str = "", action: str = "") -> str:
     """Classify a threat from message/event content into a human-readable threat name."""
     combined = (message + " " + event_type + " " + action).lower()
@@ -1157,27 +1250,34 @@ def zero_day_alerts():
         msg_text  = inner.get("message") or inner.get("short_message", "")
         evt_type  = inner.get("event_type", "")
         action    = inner.get("action", "")
+        raw_sev   = inner.get("severity") or inner.get("level", "info")
+
+        # ML classification
+        ml_name = _classify_threat_name(msg_text, evt_type, action)
+        if is_zd and ml_name == "Unknown Anomaly":
+            ml_name = "Zero-Day Anomaly"
+        threat_name = ml_name
+        details = _THREAT_DETAILS.get(threat_name, _THREAT_DETAILS.get("Unknown Anomaly", {"description": "", "cves": [], "remediation": []}))
 
         if is_zd:
-            threat_name = _classify_threat_name(msg_text, evt_type, action)
-            if threat_name == "Unknown Anomaly":
-                threat_name = "Zero-Day Anomaly"
-            details = _THREAT_DETAILS.get(threat_name, _THREAT_DETAILS["Zero-Day Anomaly"])
             description = (
                 f"{details['description']} "
                 f"IsolationForest anomaly score: {zd_score:.2f} (threshold {ZD_THRESH:.2f})."
             )
         elif severity in ("critical", "high"):
-            threat_name = _classify_threat_name(msg_text, evt_type, action)
-            details = _THREAT_DETAILS.get(threat_name, _THREAT_DETAILS["Unknown Anomaly"])
             description = (
                 f"{details['description']} "
                 f"ML confidence: {confidence:.0%} — pattern not captured by existing Graylog rules."
             )
         else:
-            threat_name = _classify_threat_name(msg_text, evt_type, action)
-            details = _THREAT_DETAILS.get(threat_name, _THREAT_DETAILS["Unknown Anomaly"])
             description = f"{details['description']} Combined risk score: {combined:.2f}."
+
+        # Graylog rule-based assessment vs ML assessment comparison
+        graylog_assess = _graylog_rule_assessment(action, str(raw_sev), evt_type, msg_text)
+        delta = _compute_comparison_delta(
+            graylog_assess["name"], graylog_assess["severity"],
+            ml_name, severity, is_zd, confidence,
+        )
 
         threats.append({
             "id":            inner.get("_id", str(i)),
@@ -1192,6 +1292,14 @@ def zero_day_alerts():
             "is_zero_day":    is_zd,
             "cves":           details.get("cves", []),
             "remediation":    details.get("remediation", []),
+            "graylog_assessment": graylog_assess,
+            "ml_assessment": {
+                "name":        ml_name,
+                "severity":    severity,
+                "confidence":  round(confidence, 3),
+                "is_zero_day": is_zd,
+            },
+            "comparison": {"delta": delta},
         })
 
     threats.sort(key=lambda t: t["combined_risk"], reverse=True)

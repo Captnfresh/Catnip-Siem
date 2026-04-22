@@ -121,6 +121,14 @@ function EventItem({ event, onClick }: { event: DashboardEvent; onClick: () => v
 // ---------------------------------------------------------------------------
 
 function ZeroDayItem({ threat, onClick }: { threat: ZeroDayThreat; onClick: () => void }) {
+  const gl  = threat.graylog_assessment;
+  const ml  = threat.ml_assessment;
+  const dlt = threat.comparison?.delta;
+  const nameMismatch = gl && ml && gl.name.toLowerCase() !== ml.name.toLowerCase()
+    && !ml.name.toLowerCase().includes(gl.name.toLowerCase())
+    && !gl.name.toLowerCase().includes(ml.name.toLowerCase());
+  const sevMismatch = gl && ml && gl.severity !== ml.severity;
+
   return (
     <button
       onClick={onClick}
@@ -128,14 +136,43 @@ function ZeroDayItem({ threat, onClick }: { threat: ZeroDayThreat; onClick: () =
     >
       <div className="flex items-start gap-1.5">
         <Zap className={`h-3 w-3 mt-0.5 flex-shrink-0 ${threat.is_zero_day ? "text-destructive" : "text-orange-400"}`} />
-        <div className="min-w-0">
+        <div className="min-w-0 w-full">
           <div className={`text-xs font-mono font-medium truncate ${SEV_COLOUR[threat.ml_severity] ?? "text-muted-foreground"}`}>
             {threat.attack_type}
+            {threat.is_zero_day && <span className="ml-1 text-destructive font-bold">ZD</span>}
           </div>
           <div className="text-xs text-muted-foreground truncate">{threat.source}</div>
-          <div className="text-xs text-muted-foreground/60 font-mono">
+
+          {gl && ml && (
+            <div className="mt-1 space-y-0.5">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-xs font-mono text-muted-foreground/60">Graylog:</span>
+                <span className={`text-xs font-mono ${nameMismatch ? "text-yellow-400" : "text-muted-foreground"}`}>
+                  {gl.name}
+                </span>
+                <span className={`text-xs font-mono ${sevMismatch ? "text-yellow-400" : "text-muted-foreground/60"}`}>
+                  [{gl.severity}]
+                </span>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-xs font-mono text-muted-foreground/60">ML:</span>
+                <span className={`text-xs font-mono ${SEV_COLOUR[ml.severity] ?? "text-muted-foreground"}`}>
+                  {ml.name}
+                </span>
+                <span className="text-xs font-mono text-muted-foreground/60">
+                  [{ml.severity}] {(ml.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+              {dlt && (nameMismatch || sevMismatch || threat.is_zero_day) && (
+                <div className="text-xs text-yellow-400/80 font-mono leading-tight pt-0.5 border-t border-border/30">
+                  {dlt}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="text-xs text-muted-foreground/60 font-mono mt-0.5">
             risk {(threat.combined_risk * 100).toFixed(0)}%
-            {threat.is_zero_day && <span className="ml-1 text-destructive">• ZD</span>}
           </div>
         </div>
       </div>

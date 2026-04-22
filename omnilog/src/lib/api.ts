@@ -163,6 +163,9 @@ export interface ZeroDayThreat {
   is_zero_day: boolean;
   cves: ReportCve[];
   remediation: string[];
+  graylog_assessment?: { name: string; severity: string };
+  ml_assessment?: { name: string; severity: string; confidence: number; is_zero_day: boolean };
+  comparison?: { delta: string };
 }
 
 export interface ZeroDayAlertsResponse {
