@@ -44,6 +44,107 @@ export async function fetchAnalysis(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Dashboard counts
+// ---------------------------------------------------------------------------
+
+export interface DashboardEvent {
+  timestamp: string;
+  source: string;
+  message: string;
+  severity: string;
+  action: string;
+  event_type: string;
+  threat_name: string;
+}
+
+export interface DashboardCategory {
+  count: number;
+  label: string;
+  events: DashboardEvent[];
+}
+
+export interface DashboardCounts {
+  failed_logins:       DashboardCategory;
+  errors:              DashboardCategory;
+  network_activity:    DashboardCategory;
+  suspicious_behaviour: DashboardCategory;
+}
+
+export async function fetchDashboardCounts(): Promise<DashboardCounts> {
+  const res = await fetch(`${BASE}/dashboard-counts`, {
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Report
+// ---------------------------------------------------------------------------
+
+export interface ReportCve {
+  id: string;
+  description: string;
+  cvss: number | null;
+  related_threat?: string;
+}
+
+export interface ReportCategory {
+  key: string;
+  label: string;
+  count: number;
+  dominant_threat: string;
+  severity: string;
+  description: string;
+  cves: ReportCve[];
+  remediation: string[];
+  sample_events: DashboardEvent[];
+}
+
+export interface RemediationItem {
+  threat: string;
+  severity: string;
+  count: number;
+  steps: string[];
+}
+
+export interface ReportData {
+  generated_at: string;
+  period: string;
+  overall_threat_level: string;
+  executive_summary: string;
+  statistics: {
+    total_events: number;
+    failed_logins: number;
+    suspicious_events: number;
+    unique_sources: number;
+  };
+  categories: ReportCategory[];
+  ml_analysis: {
+    status: string;
+    events_scored?: number;
+    zero_day_count?: number;
+    high_risk_count?: number;
+    anomaly_rate?: number;
+  };
+  cve_mappings: ReportCve[];
+  remediation_plan: RemediationItem[];
+  top_sources: { source: string; event_count: number }[];
+}
+
+export async function fetchReport(): Promise<ReportData> {
+  const res = await fetch(`${BASE}/report`, {
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Zero-day alerts
+// ---------------------------------------------------------------------------
+
 export interface ZeroDayThreat {
   id: string;
   timestamp: string;
@@ -55,6 +156,8 @@ export interface ZeroDayThreat {
   attack_type: string;
   description: string;
   is_zero_day: boolean;
+  cves: ReportCve[];
+  remediation: string[];
 }
 
 export interface ZeroDayAlertsResponse {
