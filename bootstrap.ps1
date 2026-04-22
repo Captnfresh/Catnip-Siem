@@ -15,7 +15,7 @@ function Write-Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Write-Fail($msg) { Write-Host "[ERROR] $msg" -ForegroundColor Red; exit 1 }
 function Write-Step($msg) { Write-Host "`n$msg" -ForegroundColor Cyan }
 
-# Robust .env variable reader — handles CRLF, quotes, and whitespace
+# Robust .env variable reader - handles CRLF, quotes, and whitespace
 function Read-EnvVar($varName, $envFile) {
     $line = Get-Content $envFile | Where-Object { $_ -match "^${varName}=" } | Select-Object -First 1
     if ($line) {
@@ -51,7 +51,7 @@ Write-Host "=============================================================" -Fore
 Write-Host ""
 
 # ─────────────────────────────────────────
-# Step 1 — Check dependencies
+# Step 1 - Check dependencies
 # ─────────────────────────────────────────
 Write-Step "[1/8] Checking dependencies..."
 
@@ -78,7 +78,7 @@ try {
 }
 
 # ─────────────────────────────────────────
-# Step 2 — Check Docker Desktop is running
+# Step 2 - Check Docker Desktop is running
 # ─────────────────────────────────────────
 Write-Step "[2/8] Checking Docker Desktop is running..."
 
@@ -90,7 +90,7 @@ try {
 }
 
 # ─────────────────────────────────────────
-# Step 3 — Check .env exists and load password
+# Step 3 - Check .env exists and load password
 # ─────────────────────────────────────────
 Write-Step "[3/8] Checking environment configuration..."
 
@@ -138,7 +138,7 @@ $cred    = New-Object System.Management.Automation.PSCredential($GRAYLOG_USER, $
 $stdHeaders = @{ "X-Requested-By" = "bootstrap" }
 
 # ─────────────────────────────────────────
-# Step 4 — Start Docker stack
+# Step 4 - Start Docker stack
 # ─────────────────────────────────────────
 Write-Step "[4/8] Starting Docker containers..."
 
@@ -188,7 +188,7 @@ try {
 }
 
 # ─────────────────────────────────────────
-# Step 5 — Install content pack (idempotent, robust)
+# Step 5 - Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
 Write-Step "[5/8] Installing Graylog content pack..."
 
@@ -232,7 +232,7 @@ if (-not (Test-Path $CONTENT_PACK_FILE)) {
         }
     }
 
-    # Step 5b: Install (always attempt — Graylog is idempotent on re-install)
+    # Step 5b: Install (always attempt - Graylog is idempotent on re-install)
     if ($packId) {
         Write-Info "Installing content pack (ID: $packId)..."
         try {
@@ -265,7 +265,7 @@ try {
 } catch { }
 
 # ─────────────────────────────────────────
-# Step 6 — Start log generator
+# Step 6 - Start log generator
 # ─────────────────────────────────────────
 Write-Step "[6/8] Installing Python dependencies and starting log generator..."
 
@@ -322,7 +322,7 @@ if ($process.HasExited) {
 Write-Ok "Log generator running (PID: $($process.Id))"
 
 # ─────────────────────────────────────────
-# Step 7 — Smoke test: verify logs are flowing
+# Step 7 - Smoke test: verify logs are flowing
 # ─────────────────────────────────────────
 Write-Step "[7/8] Verifying end-to-end log flow..."
 
@@ -359,7 +359,7 @@ if (-not $logsFlowing) {
 }
 
 # ─────────────────────────────────────────
-# Step 8 — Start OmniLog AI assistant
+# Step 8 - Start OmniLog AI assistant
 # ─────────────────────────────────────────
 Write-Step "[8/8] Starting OmniLog AI assistant..."
 
@@ -382,7 +382,7 @@ $modelFile = Join-Path $SCRIPT_DIR "models\catnip_severity_model.pkl"
 $mlSkip = $false
 if (-not (Test-Path $modelFile)) {
     Write-Warn "ML model not found: $modelFile"
-    Write-Host "       Skipping ML service — train in notebooks\catnip_ml_trainer.ipynb and copy the .pkl to models\" -ForegroundColor Yellow
+    Write-Host "       Skipping ML service - train in notebooks/catnip_ml_trainer.ipynb and copy the .pkl to the models folder" -ForegroundColor Yellow
     $mlSkip = $true
 } else {
     Write-Ok "ML model found"
@@ -438,13 +438,13 @@ try {
         Start-Sleep -Seconds 4
         if (-not $uiProcess.HasExited) {
             $omnilogUiPid = $uiProcess.Id
-            Write-Ok "OmniLog UI running (PID: $omnilogUiPid) — http://localhost:5173"
+            Write-Ok "OmniLog UI running (PID: $omnilogUiPid) - http://localhost:5173"
         } else {
             Write-Warn "OmniLog UI failed to start. Check: $uiLog"
         }
     }
 } catch {
-    Write-Warn "Node.js not found — skipping OmniLog frontend. Install from https://nodejs.org"
+    Write-Warn "Node.js not found - skipping OmniLog frontend. Install from https://nodejs.org"
 }
 
 # ─────────────────────────────────────────
