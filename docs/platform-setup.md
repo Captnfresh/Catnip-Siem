@@ -21,17 +21,17 @@ This covers the Docker-based deployment of three core services:
 
 ## Architecture Decision
 
-We chose Docker Compose for deployment because it allowed the entire 
+I chose Docker Compose for deployment because it allowed the entire 
 stack to be defined in a single file and started with one command. 
 This made the platform reproducible across all team members' machines 
 regardless of operating system.
 
-We chose **Graylog 6.1** over the newer 7.x release deliberately — 
+I chose **Graylog 6.1** over the newer 7.x release deliberately — 
 Graylog 7.x had not been fully validated against OpenSearch 2.15 at 
 the time of deployment. Stability and documented compatibility were 
 prioritised over running the latest release.
 
-We chose **OpenSearch** over Elasticsearch because Elasticsearch 
+I chose **OpenSearch** over Elasticsearch because Elasticsearch 
 changed its licence in 2021 to a proprietary model. OpenSearch is 
 the fully open source fork and is officially recommended by Graylog 
 6.x documentation.
@@ -115,18 +115,10 @@ cp .env.example .env
 # Fill in values — shared privately with team
 ```
 
-### 3. Run bootstrap script
+### 3. Start the platform
 ```bash
-chmod +x bootstrap.sh
-./bootstrap.sh
+docker compose up -d
 ```
-
-The bootstrap script automatically:
-- Detects the operating system
-- Sets `vm.max_map_count=262144` on Linux/WSL (required by OpenSearch)
-- Starts all three Docker containers
-- Waits for Graylog to become healthy
-- Installs Python dependencies
 
 ### 4. Verify deployment
 ```bash
@@ -151,9 +143,13 @@ This was encountered during development on Windows. Resolution:
 
 ### OpenSearch requires vm.max_map_count
 OpenSearch needs a higher virtual memory map count than the Linux 
-default. On WSL this resets on restart — the bootstrap script 
-handles this automatically. On Mac with Docker Desktop, this is 
-not required.
+default. On WSL this resets on restart — set it manually with:
+
+```bash
+sudo sysctl -w vm.max_map_count=262144
+```
+
+On Mac with Docker Desktop, this is not required.
 
 ### Graylog notification: "outdated version"
 Graylog 7.0.6 was released after our deployment. We deliberately 
