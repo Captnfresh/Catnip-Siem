@@ -364,12 +364,12 @@ if (Test-Path $geomapScript) {
         -PassThru
     Start-Sleep -Seconds 2
     if (-not $geomapProcess.HasExited) {
-        Write-Ok "Live attack map running (PID: $($geomapProcess.Id)) — http://localhost:8888"
+        Write-Ok "Live attack map running (PID: $($geomapProcess.Id)) - http://localhost:8888"
     } else {
         Write-Warn "Attack map failed to start. Check: $geomapLog"
     }
 } else {
-    Write-Warn "Geomap script not found — skipping attack map"
+    Write-Warn "Geomap script not found - skipping attack map"
 }
 
 # ─────────────────────────────────────────

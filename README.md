@@ -5,6 +5,8 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-7-green)](https://mongodb.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docker.com)
 [![Python](https://img.shields.io/badge/Python-3.x-yellow)](https://python.org)
+[![ML](https://img.shields.io/badge/ML-scikit--learn-orange)](https://scikit-learn.org)
+[![AI](https://img.shields.io/badge/AI-Claude%20API-blueviolet)](https://anthropic.com)
 [![React](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev)
 
 ---
@@ -194,28 +196,117 @@ When you close your laptop, shut down, or restart WSL, Docker containers stop an
 
 Or restart manually if you prefer:
 
+**Mac / Linux / WSL:**
 ```bash
 # 1. Start Docker containers
 docker compose up -d
 
-# 2. Install Python deps (first time only)
+# 2. Install Python deps (first time only — skip on subsequent runs)
 pip install -r ml/requirements.txt
 
-# 3. Start ML service (background)
-python scripts/ml_service.py &          # Mac/Linux
-Start-Process python scripts/ml_service.py  # Windows PowerShell
+# 3. Start ML service on port 5001
+nohup python scripts/ml_service.py > logs/ml_service.log 2>&1 &
+echo "ML service PID: $!"
 
-# 4. Start OmniLog API (background)
-python scripts/omnilog_api.py &
-Start-Process python scripts/omnilog_api.py
+# 4. Start OmniLog API on port 5002
+nohup python scripts/omnilog_api.py > logs/omnilog_api.log 2>&1 &
+echo "OmniLog API PID: $!"
 
-# 5. Start log generator (background)
-python scripts/log_generator.py &
-Start-Process python scripts/log_generator.py
+# 5. Start log generator (sends GELF to Graylog TCP 12201)
+nohup python scripts/log_generator.py > logs/generator.log 2>&1 &
+echo "Log generator PID: $!"
 
-# 6. Start OmniLog frontend (background, from the omnilog/ directory)
-cd omnilog && npm run dev &
-cd omnilog; npm run dev   # PowerShell (run in separate terminal)
+# 6. Start live attack map on port 8888
+nohup python geomap/geomap.py > logs/geomap.log 2>&1 &
+echo "Geomap PID: $!"
+
+# 7. Start OmniLog frontend on port 5173 (run in a separate terminal)
+cd omnilog && npm run dev
+```
+
+**Windows PowerShell:**
+```powershell
+# Run all of these from the Catnip-Siem project directory
+$dir  = (Get-Location).Path
+$logs = "$dir\logs"
+if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Path $logs | Out-Null }
+
+# 1. Start Docker containers
+docker compose up -d
+
+# 2. Install Python deps (first time only)
+python -m pip install -r ml\requirements.txt --quiet
+
+# 3. Start ML service on port 5001
+$ml = Start-Process python -ArgumentList "-u", "scripts\ml_service.py" `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput "$logs\ml_service.log" `
+    -RedirectStandardError  "$logs\ml_service_error.log" `
+    -WindowStyle Hidden -PassThru
+Write-Host "ML service PID: $($ml.Id)"
+
+# 4. Start OmniLog API on port 5002
+$api = Start-Process python -ArgumentList "-u", "scripts\omnilog_api.py" `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput "$logs\omnilog_api.log" `
+    -RedirectStandardError  "$logs\omnilog_api_error.log" `
+    -WindowStyle Hidden -PassThru
+Write-Host "OmniLog API PID: $($api.Id)"
+
+# 5. Start log generator (sends GELF to Graylog TCP 12201)
+$gen = Start-Process python -ArgumentList "-u", "scripts\log_generator.py" `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput "$logs\generator.log" `
+    -RedirectStandardError  "$logs\generator_error.log" `
+    -WindowStyle Hidden -PassThru
+Write-Host "Log generator PID: $($gen.Id)"
+
+# 6. Start live attack map on port 8888
+$geo = Start-Process python -ArgumentList "-u", "geomap\geomap.py" `
+    -WorkingDirectory $dir `
+    -RedirectStandardOutput "$logs\geomap.log" `
+    -RedirectStandardError  "$logs\geomap_error.log" `
+    -WindowStyle Hidden -PassThru
+Write-Host "Geomap PID: $($geo.Id)"
+
+# 7. Start OmniLog frontend on port 5173 (open a new terminal for this)
+# cd omnilog; npm run dev
+$vite = Start-Process "$dir\omnilog\node_modules\.bin\vite.cmd" `
+    -ArgumentList "--port", "5173" `
+    -WorkingDirectory "$dir\omnilog" `
+    -RedirectStandardOutput "$logs\omnilog_ui.log" `
+    -WindowStyle Hidden -PassThru
+Write-Host "OmniLog UI PID: $($vite.Id)"
+```
+
+**Verify all services are responding:**
+```powershell
+# Health-check all services (run after ~5 seconds)
+@(
+  @{ Name="ML Service";  Url="http://localhost:5001/health" },
+  @{ Name="OmniLog API"; Url="http://localhost:5002/health" },
+  @{ Name="Geomap";      Url="http://localhost:8888" },
+  @{ Name="OmniLog UI";  Url="http://localhost:5173" }
+) | ForEach-Object {
+  try {
+    $r = Invoke-WebRequest -Uri $_.Url -UseBasicParsing -TimeoutSec 5
+    Write-Host "[OK]   $($_.Name)"
+  } catch {
+    Write-Host "[FAIL] $($_.Name)"
+  }
+}
+```
+
+**View service logs in real time:**
+```powershell
+# Log generator output (should show events every ~1 second)
+Get-Content logs\generator.log -Wait -Tail 20
+
+# OmniLog API log
+Get-Content logs\omnilog_api.log -Wait -Tail 20
+
+# ML service log
+Get-Content logs\ml_service.log -Wait -Tail 20
 ```
 
 ---
