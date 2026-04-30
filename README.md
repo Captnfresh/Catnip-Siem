@@ -407,38 +407,7 @@ The pre-trained severity model (`models/catnip_severity_model.pkl`) ships with t
 
 ## Architecture
 
-```
-                        ┌─────────────────────────────┐
-                        │  OmniLog UI  (React/Vite)   │
-                        │     http://localhost:5173    │
-                        └──────────────┬──────────────┘
-                                       │ /omnilog-api proxy
-                        ┌──────────────▼──────────────┐
-                        │   OmniLog API  (Flask 5002)  │
-                        │  Claude claude-opus-4-7      │
-                        └───┬──────────────┬──────────┘
-                            │              │
-           ┌────────────────▼──┐    ┌──────▼──────────────┐
-           │  Graylog 6.1       │    │  ML Service (5001)  │
-           │  :9000 (HTTP)      │    │  Severity + ZeroDay │
-           │  :12201 (GELF TCP) │    └─────────────────────┘
-           │  :1514  (Syslog)   │
-           └────────┬──────────┘
-                    │ OpenSearch protocol
-           ┌────────▼──────────┐
-           │  OpenSearch 2.15  │
-           │  (log storage)    │
-           └───────────────────┘
-           ┌───────────────────┐
-           │   MongoDB 7       │
-           │  (Graylog config) │
-           └───────────────────┘
-           ┌───────────────────┐
-           │  Log Generator    │
-           │  (Python / GELF   │
-           │   TCP → :12201)   │
-           └───────────────────┘
-```
+![Catnip Games SIEM Architecture](assets/architecture-diagram.svg)
 
 > **Important — GELF TCP not UDP:** Docker Desktop on Windows silently drops UDP port forwarding for port 12201. The log generator uses GELF over TCP (null-byte delimited) which Docker Desktop forwards reliably. The Graylog content pack includes a GELF TCP input on port 12201. Do not change this to UDP — messages will be silently lost.
 
