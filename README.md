@@ -20,6 +20,102 @@ The system monitors a fictional gaming company (Catnip Games International) and 
 - **ML Engine** — machine learning threat severity scoring and zero-day anomaly detection
 - **Live Attack Map** — real-time geographic visualisation of attack sources
 - **Log Generator** — simulates 300 game servers, player authentication, DDoS, and SSH attacks
+**Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats.
+
+**Assessment:** In-lab team demonstration with individual Q&A
+
+**The brief asked us to:**
+- Select a real-world security scenario requiring automated monitoring
+- Design and deploy a SIEM solution addressing that scenario
+- Demonstrate log ingestion, parsing, stream routing, dashboards, and alerting
+- Show evidence of automation beyond manual configuration
+- Reflect critically on design decisions, limitations, and mitigations
+
+**Our Solution:** We built a fully operational Graylog-based SIEM for a fictional gaming company called Catnip Games International, simulating the security infrastructure of a company with 300 game servers, a player authentication system, and a developer environment, all of which were compromised or unmonitored during the company's beta phase.
+
+---
+
+## The Problem We Solved
+
+During Catnip Games' beta testing phase, three critical security incidents went undetected for several days:
+
+- Unauthorised access attempts to player data
+- Potential DDoS attacks targeting game servers
+- Suspicious activity in development environments
+
+The root cause was fragmented logging and manual monitoring. Logs lived on individual servers with no central visibility. There were no automated alerts. Nobody was watching.
+
+This project builds the solution — a centralised SIEM that collects, parses, visualises, and alerts on security events across the entire Catnip Games infrastructure in real time.
+
+---
+
+## What This System Does
+
+- Collects real SSH authentication logs from Linux servers via rsyslog
+- Simulates game server, player auth, DDoS, and dev SSH log events via Python
+- Parses raw log messages into structured searchable fields using extractors
+- Routes events into logical streams for targeted analysis and alerting
+- Displays real-time security data across 5 purpose-built dashboards with 20 widgets
+- Detects threats automatically using 4 correlation alert rules
+- Sends email notifications when attacks are detected via Gmail SMTP
+- Generates weekly automated security reports via Python API queries
+
+---
+
+## Architecture Diagram
+
+![Catnip Games SIEM Architecture](assets/catnip-siem-architecture.svg)
+
+The diagram above shows the complete data flow — from log sources on the left, through Graylog inputs, extractors, and stream routing, into OpenSearch storage, and out through dashboards, alerts, and automated reports to the SOC team. Each layer is labelled with the team member responsible for that component.
+
+---
+
+## Tech Stack
+
+| Component | Version | Purpose |
+|---|---|---|
+| Graylog | 6.1 | SIEM brain, web UI, alerting |
+| OpenSearch | 2.15.0 | Log storage and full-text search |
+| MongoDB | 7 | Graylog configuration storage |
+| Docker Compose | v2+ | Container orchestration |
+| Python | 3.x | Log simulation and report generation |
+| rsyslog | built-in | Real SSH log forwarding |
+
+### Why these specific versions
+
+**Graylog 6.1 not 7.x** — Graylog 7.x had not been validated against OpenSearch 2.15 at time of deployment. Stability and documented compatibility were prioritised over running the latest release.
+
+**OpenSearch not Elasticsearch** — Elastic changed its licence to proprietary in 2021. OpenSearch is the fully open source fork and is officially supported by Graylog 6.x.
+
+**MongoDB 7** — Current stable release officially supported by Graylog 6.x. MongoDB stores Graylog configuration only — not the actual log data.
+
+---
+
+## Repository Structure
+
+```
+Catnip-Siem/
+├── docker-compose.yml          # Full stack definition
+├── .env.example                # Environment variable template
+├── .gitignore                  # Excludes secrets and generated files
+├── bootstrap.sh                # One-command setup — Mac, Linux, WSL
+├── bootstrap.ps1               # One-command setup — Windows PowerShell
+├── bootstrap.bat               # One-command setup — Windows CMD
+├── scripts/
+│   ├── log_generator.py        # Simulates Catnip Games infrastructure
+│   └── report_generator.py     # Automated weekly security report
+|   └── baseline_engine.py      # behavioural baseline engine for anomaly detection
+├── content-packs/
+│   └── catnip-siem-pack.json   # Full Graylog config — streams, alerts,
+│                               # dashboards, extractors, notifications
+├── assets/
+│   └── catnip-siem-architecture.svg
+└── docs/
+    ├── platform-setup.md       # Infrastructure and Docker setup (Stephen)
+    ├── log-ingestion.md        # Inputs, extractors, streams (Lekan)
+    ├── alert-rules.md          # Alert definitions and remediation (Faith)
+    └── dashboards.md           # Dashboard design and widget reference (Akhamas)
+```
 
 ---
 
