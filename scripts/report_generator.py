@@ -9,15 +9,26 @@ import json
 import datetime
 import os
 from collections import Counter
+from pathlib import Path
 from requests.auth import HTTPBasicAuth
 
 # ─────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────
-GRAYLOG_HOST = "http://localhost:9000"
+def _read_env(key: str, default: str = "") -> str:
+    """Read a value from .env file, falling back to environment variables."""
+    env_file = Path(__file__).resolve().parents[1] / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip().rstrip("\r")
+            if line.startswith(f"{key}=") and not line.startswith("#"):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return os.environ.get(key, default)
+
+GRAYLOG_HOST = "http://[::1]:9000"
 GRAYLOG_API  = f"{GRAYLOG_HOST}/api"
 GRAYLOG_USER = "admin"
-GRAYLOG_PASS = os.environ.get("GRAYLOG_PASS", "CatnipAdmin@2026")
+GRAYLOG_PASS = _read_env("GRAYLOG_ADMIN_PASSWORD") or _read_env("GRAYLOG_PASSWORD")
 
 REPORTS_DIR  = os.path.join(os.path.dirname(__file__), "../reports")
 

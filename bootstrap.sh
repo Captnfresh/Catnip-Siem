@@ -56,7 +56,7 @@ echo ""
 # ─────────────────────────────────────────
 # Step 1 — Detect OS
 # ─────────────────────────────────────────
-step "[1/7] Detecting operating system..."
+step "[1/8] Detecting operating system..."
 
 OS="unknown"
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -68,6 +68,9 @@ elif grep -qi microsoft /proc/version 2>/dev/null; then
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     OS="linux"
     ok "Linux detected"
+elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+    OS="windows"
+    ok "Windows (Git Bash / MSYS2) detected"
 else
     fail "Unsupported operating system: $OSTYPE"
 fi
@@ -75,7 +78,7 @@ fi
 # ─────────────────────────────────────────
 # Step 2 — Check dependencies
 # ─────────────────────────────────────────
-step "[2/7] Checking dependencies..."
+step "[2/8] Checking dependencies..."
 
 if ! command -v docker &>/dev/null; then
     fail "Docker not found. Please install Docker Desktop from https://docker.com and try again."
@@ -87,10 +90,14 @@ if ! docker compose version &>/dev/null; then
 fi
 ok "Docker Compose found"
 
-if ! command -v python3 &>/dev/null; then
-    fail "Python3 not found. Please install Python 3 from https://python.org and try again."
+if command -v python3 &>/dev/null; then
+    PYTHON=python3
+elif command -v python &>/dev/null; then
+    PYTHON=python
+else
+    fail "Python not found. Please install Python 3 from https://python.org and try again."
 fi
-ok "Python3 found: $(python3 --version)"
+ok "Python found: $($PYTHON --version)"
 
 if ! command -v curl &>/dev/null; then
     fail "curl not found. Please install curl and try again."
@@ -99,7 +106,7 @@ fi
 # ─────────────────────────────────────────
 # Step 3 — Set vm.max_map_count (Linux/WSL only)
 # ─────────────────────────────────────────
-step "[3/7] Configuring system settings..."
+step "[3/8] Configuring system settings..."
 
 if [[ "$OS" == "wsl" || "$OS" == "linux" ]]; then
     info "Setting vm.max_map_count=262144 (required by OpenSearch)..."
@@ -112,13 +119,13 @@ if [[ "$OS" == "wsl" || "$OS" == "linux" ]]; then
         ok "vm.max_map_count already configured"
     fi
 else
-    ok "macOS — vm.max_map_count not required (Docker Desktop manages this)"
+    ok "Docker Desktop manages vm.max_map_count — no action needed"
 fi
 
 # ─────────────────────────────────────────
 # Step 4 — Check .env, auto-fix CRLF, load password
 # ─────────────────────────────────────────
-step "[4/7] Checking environment configuration..."
+step "[4/8] Checking environment configuration..."
 
 if [ ! -f ".env" ]; then
     echo ""
@@ -170,7 +177,7 @@ ok "Graylog admin credentials loaded from .env"
 # ─────────────────────────────────────────
 # Step 5 — Start Docker stack and wait for Graylog
 # ─────────────────────────────────────────
-step "[5/7] Starting Docker containers..."
+step "[5/8] Starting Docker containers..."
 
 info "Running docker compose up -d..."
 docker compose up -d
@@ -217,14 +224,14 @@ ok "Graylog authentication verified"
 # ─────────────────────────────────────────
 # Step 6 — Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
-step "[6/7] Installing Graylog content pack..."
+step "[6/8] Installing Graylog content pack..."
 
 # Helper: find content pack ID by name (returns empty string if not found)
 find_pack_id_by_name() {
     curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
         -H "X-Requested-By: bootstrap" \
         "$GRAYLOG_URL/api/system/content_packs" 2>/dev/null | \
-    python3 -c "
+    $PYTHON -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -297,7 +304,7 @@ sleep 3
 # Verify at least one input exists before starting the generator
 INPUT_COUNT=$(curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
     "$GRAYLOG_URL/api/system/inputs" 2>/dev/null | \
-    python3 -c "import sys, json; print(json.load(sys.stdin).get('total', 0))" 2>/dev/null || echo "0")
+    $PYTHON -c "import sys, json; print(json.load(sys.stdin).get('total', 0))" 2>/dev/null || echo "0")
 
 if [ "$INPUT_COUNT" = "0" ]; then
     warn "No Graylog inputs configured — logs will not be ingested until you add one."
@@ -308,12 +315,11 @@ fi
 # ─────────────────────────────────────────
 # Step 7 — Start log generator and verify logs are flowing
 # ─────────────────────────────────────────
-step "[7/7] Starting log generator and verifying end-to-end flow..."
+step "[7/8] Starting log generator and verifying end-to-end flow..."
 
 info "Installing Python dependencies..."
-pip3 install requests --break-system-packages --quiet 2>/dev/null || \
-pip3 install requests --quiet 2>/dev/null || \
-python3 -m pip install requests --quiet 2>/dev/null || \
+$PYTHON -m pip install requests --break-system-packages --quiet 2>/dev/null || \
+$PYTHON -m pip install requests --quiet 2>/dev/null || \
 warn "Could not install requests — generator may fail"
 ok "Python dependencies ready"
 
@@ -328,7 +334,7 @@ get_message_count() {
     curl -s -u "$GRAYLOG_USER:$GRAYLOG_PASS" \
         -H "Accept: application/json" \
         "$GRAYLOG_URL/api/search/universal/relative?query=*&range=300&limit=1" 2>/dev/null | \
-    python3 -c "import sys, json; print(json.load(sys.stdin).get('total_results', 0))" 2>/dev/null || echo "0"
+    $PYTHON -c "import sys, json; print(json.load(sys.stdin).get('total_results', 0))" 2>/dev/null || echo "0"
 }
 
 BASELINE_COUNT=$(get_message_count)
@@ -336,17 +342,17 @@ info "Baseline message count: $BASELINE_COUNT"
 
 # Start the generator
 info "Starting log generator in background..."
-nohup python3 "$SCRIPTS_DIR/log_generator.py" > "$GENERATOR_LOG" 2>&1 &
+nohup $PYTHON "$SCRIPTS_DIR/log_generator.py" > "$GENERATOR_LOG" 2>&1 &
 GENERATOR_PID=$!
 sleep 3
 
 
 # Start geomap
 info "Starting live attack map in background..."
-pip3 install flask --break-system-packages --quiet 2>/dev/null || true
+$PYTHON -m pip install flask --break-system-packages --quiet 2>/dev/null || true
 pkill -f "geomap.py" 2>/dev/null || true
 sleep 1
-nohup python3 "$(dirname "$0")/geomap/geomap.py" > "$(dirname "$0")/logs/geomap.log" 2>&1 &
+nohup $PYTHON "$(dirname "$0")/geomap/geomap.py" > "$(dirname "$0")/logs/geomap.log" 2>&1 &
 GEOMAP_PID=$!
 sleep 2
 if kill -0 "$GEOMAP_PID" 2>/dev/null; then
@@ -402,6 +408,80 @@ if [ $LOGS_FLOWING -ne 1 ]; then
 fi
 
 # ─────────────────────────────────────────
+# Step 8 — Start OmniLog AI assistant
+# ─────────────────────────────────────────
+step "[8/8] Starting OmniLog AI assistant..."
+
+OMNILOG_DIR="$(dirname "$0")/omnilog"
+ML_LOG="$LOGS_DIR/ml_service.log"
+OMNILOG_API_LOG="$LOGS_DIR/omnilog_api.log"
+OMNILOG_UI_LOG="$LOGS_DIR/omnilog_ui.log"
+
+info "Installing OmniLog Python dependencies..."
+$PYTHON -m pip install -r "$(dirname "$0")/ml/requirements.txt" --break-system-packages --quiet 2>/dev/null || \
+$PYTHON -m pip install -r "$(dirname "$0")/ml/requirements.txt" --quiet 2>/dev/null || \
+warn "Could not install OmniLog dependencies — run: pip install -r ml/requirements.txt"
+ok "OmniLog Python dependencies ready"
+
+# Check model file exists
+MODEL_FILE="$(dirname "$0")/models/catnip_severity_model.pkl"
+if [ ! -f "$MODEL_FILE" ]; then
+    warn "ML model not found: $MODEL_FILE"
+    warn "Skipping ML service — train the model in notebooks/catnip_ml_trainer.ipynb and copy the .pkl to models/"
+    ML_SKIP=1
+else
+    ok "ML model found"
+    ML_SKIP=0
+fi
+
+# Kill any stale instances
+pkill -f "ml_service.py" 2>/dev/null || true
+pkill -f "omnilog_api.py" 2>/dev/null || true
+sleep 1
+
+if [ "$ML_SKIP" -eq 0 ]; then
+    info "Starting ML service (port 5001)..."
+    nohup $PYTHON "$SCRIPTS_DIR/ml_service.py" > "$ML_LOG" 2>&1 &
+    ML_PID=$!
+    sleep 3
+    if kill -0 "$ML_PID" 2>/dev/null; then
+        ok "ML service running (PID: $ML_PID)"
+    else
+        warn "ML service failed to start. Check: $ML_LOG"
+    fi
+fi
+
+info "Starting OmniLog API (port 5002)..."
+nohup $PYTHON "$SCRIPTS_DIR/omnilog_api.py" > "$OMNILOG_API_LOG" 2>&1 &
+OMNILOG_API_PID=$!
+sleep 3
+
+if kill -0 "$OMNILOG_API_PID" 2>/dev/null; then
+    ok "OmniLog API running (PID: $OMNILOG_API_PID)"
+else
+    warn "OmniLog API failed to start. Check: $OMNILOG_API_LOG"
+fi
+
+OMNILOG_UI_PID=""
+if [ -d "$OMNILOG_DIR" ] && command -v node &>/dev/null; then
+    if [ ! -d "$OMNILOG_DIR/node_modules" ]; then
+        info "Installing OmniLog frontend dependencies (first run)..."
+        (cd "$OMNILOG_DIR" && npm install --silent 2>/dev/null) || warn "npm install failed"
+    fi
+    info "Starting OmniLog frontend (port 5173)..."
+    nohup bash -c "cd '$OMNILOG_DIR' && node_modules/.bin/vite --port 5173" > "$OMNILOG_UI_LOG" 2>&1 &
+    OMNILOG_UI_PID=$!
+    sleep 4
+    if kill -0 "$OMNILOG_UI_PID" 2>/dev/null; then
+        ok "OmniLog UI running (PID: $OMNILOG_UI_PID) — http://localhost:5173"
+    else
+        warn "OmniLog UI failed to start. Check: $OMNILOG_UI_LOG"
+    fi
+else
+    warn "Node.js not found — skipping OmniLog frontend. Install from https://nodejs.org"
+fi
+
+# ─────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────
 echo ""
@@ -417,20 +497,22 @@ echo "  Graylog UI:      $GRAYLOG_URL"
 echo "  Username:        admin"
 echo "  Password:        (from GRAYLOG_ADMIN_PASSWORD in .env)"
 echo "  Attack Map:      http://localhost:8888"
+echo "  OmniLog UI:      http://localhost:5173"
+echo "  OmniLog API:     http://localhost:5002"
+echo "  ML Service:      http://localhost:5001"
 echo ""
 echo "  Log generator:   running in background (PID: $GENERATOR_PID)"
 echo "  Generator logs:  $GENERATOR_LOG"
 echo ""
 echo "  To generate a security report:"
-echo "    python3 scripts/report_generator.py"
+echo "    python scripts/report_generator.py"
 echo ""
-echo "  To stop the log generator:"
+echo "  To stop everything:"
 echo "    pkill -f log_generator.py"
-echo ""
-echo "  To stop the geomap:"
 echo "    pkill -f geomap.py"
-echo ""
-echo "  To stop all containers:"
+echo "    pkill -f ml_service.py"
+echo "    pkill -f omnilog_api.py"
+echo "    pkill -f vite"
 echo "    docker compose down"
 echo ""
 echo "============================================================="
