@@ -15,17 +15,23 @@ function Write-Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Write-Fail($msg) { Write-Host "[ERROR] $msg" -ForegroundColor Red; exit 1 }
 function Write-Step($msg) { Write-Host "`n$msg" -ForegroundColor Cyan }
 
-# Robust .env variable reader — handles CRLF, quotes, and whitespace
+# Robust .env variable reader - handles CRLF, quotes, and whitespace
 function Read-EnvVar($varName, $envFile) {
     $line = Get-Content $envFile | Where-Object { $_ -match "^${varName}=" } | Select-Object -First 1
     if ($line) {
         $value = ($line -replace "^${varName}=", "").Trim()
-        # Strip trailing \r (CRLF), leading/trailing quotes
         $value = $value -replace "`r$", ""
         $value = $value.Trim('"').Trim("'")
         return $value
     }
     return ""
+}
+
+# Kill processes by matching their command line (PS5.1 safe - uses CIM)
+function Stop-ProcessByCommandLine($pattern) {
+    Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like "*$pattern*" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 # ─────────────────────────────────────────
@@ -40,6 +46,10 @@ $SCRIPTS_DIR       = Join-Path $SCRIPT_DIR "scripts"
 $LOGS_DIR          = Join-Path $SCRIPT_DIR "logs"
 $GENERATOR_LOG     = Join-Path $LOGS_DIR "generator.log"
 $envFile           = Join-Path $SCRIPT_DIR ".env"
+$requirementsFile  = Join-Path $SCRIPT_DIR "ml\requirements.txt"
+$modelFile         = Join-Path $SCRIPT_DIR "models\catnip_severity_model.pkl"
+$omnilogDir        = Join-Path $SCRIPT_DIR "omnilog"
+$geomapScript      = Join-Path $SCRIPT_DIR "geomap\geomap.py"
 
 # ─────────────────────────────────────────
 # Header
@@ -51,9 +61,9 @@ Write-Host "=============================================================" -Fore
 Write-Host ""
 
 # ─────────────────────────────────────────
-# Step 1 — Check dependencies
+# Step 1 - Check dependencies
 # ─────────────────────────────────────────
-Write-Step "[1/7] Checking dependencies..."
+Write-Step "[1/8] Checking dependencies..."
 
 try {
     $dockerVersion = docker --version 2>&1
@@ -69,18 +79,35 @@ try {
     Write-Fail "Docker Compose not found. Please update Docker Desktop."
 }
 
+# Detect which Python command is available (python vs python3)
+# Wrapped in try/catch because $ErrorActionPreference = "Stop" means a missing
+# command throws a terminating error rather than just setting a non-zero exit code.
+$PYTHON_CMD = $null
+$_pyVer = ""
 try {
-    $pythonVersion = python --version 2>&1
-    if (-not $pythonVersion) { $pythonVersion = python3 --version 2>&1 }
-    Write-Ok "Python found: $pythonVersion"
-} catch {
+    $_pyVer = python --version 2>&1
+    if ($LASTEXITCODE -eq 0 -or ($_pyVer -match "Python \d")) {
+        $PYTHON_CMD = "python"
+        Write-Ok "Python found: $_pyVer"
+    }
+} catch { }
+if (-not $PYTHON_CMD) {
+    try {
+        $_pyVer = python3 --version 2>&1
+        if ($LASTEXITCODE -eq 0 -or ($_pyVer -match "Python \d")) {
+            $PYTHON_CMD = "python3"
+            Write-Ok "Python found: $_pyVer"
+        }
+    } catch { }
+}
+if (-not $PYTHON_CMD) {
     Write-Fail "Python not found. Install Python 3 from https://python.org"
 }
 
 # ─────────────────────────────────────────
-# Step 2 — Check Docker Desktop is running
+# Step 2 - Check Docker Desktop is running
 # ─────────────────────────────────────────
-Write-Step "[2/7] Checking Docker Desktop is running..."
+Write-Step "[2/8] Checking Docker Desktop is running..."
 
 try {
     docker ps 2>&1 | Out-Null
@@ -90,9 +117,9 @@ try {
 }
 
 # ─────────────────────────────────────────
-# Step 3 — Check .env exists and load password
+# Step 3 - Check .env exists and load password
 # ─────────────────────────────────────────
-Write-Step "[3/7] Checking environment configuration..."
+Write-Step "[3/8] Checking environment configuration..."
 
 if (-not (Test-Path $envFile)) {
     Write-Host ""
@@ -133,14 +160,14 @@ if (-not $GRAYLOG_PASS) {
 Write-Ok "Graylog admin credentials loaded from .env"
 
 # Build credential object for REST calls
-$secPass = ConvertTo-SecureString $GRAYLOG_PASS -AsPlainText -Force
-$cred    = New-Object System.Management.Automation.PSCredential($GRAYLOG_USER, $secPass)
+$secPass    = ConvertTo-SecureString $GRAYLOG_PASS -AsPlainText -Force
+$cred       = New-Object System.Management.Automation.PSCredential($GRAYLOG_USER, $secPass)
 $stdHeaders = @{ "X-Requested-By" = "bootstrap" }
 
 # ─────────────────────────────────────────
-# Step 4 — Start Docker stack
+# Step 4 - Start Docker stack
 # ─────────────────────────────────────────
-Write-Step "[4/7] Starting Docker containers..."
+Write-Step "[4/8] Starting Docker containers..."
 
 Write-Info "Running docker compose up -d..."
 Set-Location $SCRIPT_DIR
@@ -160,12 +187,12 @@ while ($count -lt $retries) {
 
     try {
         $response = Invoke-WebRequest -UseBasicParsing `
-            -Uri "$GRAYLOG_URL/api/system/lbstatus" `
+            -Uri "$GRAYLOG_URL/api/system" `
             -Credential $cred `
             -TimeoutSec 5 `
             -ErrorAction SilentlyContinue
 
-        if ($response.Content -match "ALIVE") {
+        if ($response.Content -match "alive") {
             $ready = $true
             break
         }
@@ -188,9 +215,9 @@ try {
 }
 
 # ─────────────────────────────────────────
-# Step 5 — Install content pack (idempotent, robust)
+# Step 5 - Install content pack (idempotent, robust)
 # ─────────────────────────────────────────
-Write-Step "[5/7] Installing Graylog content pack..."
+Write-Step "[5/8] Installing Graylog content pack..."
 
 function Find-PackIdByName {
     try {
@@ -232,7 +259,7 @@ if (-not (Test-Path $CONTENT_PACK_FILE)) {
         }
     }
 
-    # Step 5b: Install (always attempt — Graylog is idempotent on re-install)
+    # Step 5b: Install (always attempt - Graylog is idempotent on re-install)
     if ($packId) {
         Write-Info "Installing content pack (ID: $packId)..."
         try {
@@ -265,27 +292,29 @@ try {
 } catch { }
 
 # ─────────────────────────────────────────
-# Step 6 — Start log generator
+# Step 6 - Install Python dependencies, start log generator and attack map
 # ─────────────────────────────────────────
-Write-Step "[6/7] Installing Python dependencies and starting log generator..."
+Write-Step "[6/8] Installing Python dependencies and starting background services..."
 
+# Install all Python deps up-front so log generator, geomap, and OmniLog all have what they need
+Write-Info "Installing Python dependencies (ml\requirements.txt)..."
 try {
-    python -m pip install requests --quiet 2>&1 | Out-Null
-    Write-Ok "Python requests library installed"
+    & $PYTHON_CMD -m pip install -r $requirementsFile --quiet 2>&1 | Out-Null
+    Write-Ok "Python dependencies installed"
 } catch {
-    Write-Warn "Could not install requests library. Run manually: pip install requests"
+    Write-Warn "Could not install Python dependencies. Run manually: pip install -r ml\requirements.txt"
 }
 
 if (-not (Test-Path $LOGS_DIR)) {
     New-Item -ItemType Directory -Path $LOGS_DIR | Out-Null
 }
 
-# Kill any existing generator
-Get-Process -Name "python*" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like "*log_generator*" } |
-    Stop-Process -Force -ErrorAction SilentlyContinue
+# --- Log generator ---
 
-# Capture baseline via universal search (works across Graylog versions)
+# Kill any stale generator (PS5.1 safe via CIM)
+Stop-ProcessByCommandLine "log_generator"
+
+# Capture baseline message count
 function Get-MessageCount {
     try {
         $resp = Invoke-RestMethod `
@@ -302,8 +331,8 @@ $baselineCount = Get-MessageCount
 Write-Info "Baseline message count: $baselineCount"
 
 $generatorScript = Join-Path $SCRIPTS_DIR "log_generator.py"
-$process = Start-Process python `
-    -ArgumentList $generatorScript `
+$generatorProcess = Start-Process $PYTHON_CMD `
+    -ArgumentList "-u", $generatorScript `
     -RedirectStandardOutput $GENERATOR_LOG `
     -RedirectStandardError "$LOGS_DIR\generator_error.log" `
     -WindowStyle Hidden `
@@ -311,7 +340,7 @@ $process = Start-Process python `
 
 Start-Sleep -Seconds 3
 
-if ($process.HasExited) {
+if ($generatorProcess.HasExited) {
     Write-Warn "Log generator crashed on startup. Last 20 lines of generator log:"
     Write-Host "---" -ForegroundColor Gray
     if (Test-Path $GENERATOR_LOG) { Get-Content $GENERATOR_LOG -Tail 20 }
@@ -319,12 +348,34 @@ if ($process.HasExited) {
     Write-Host "---" -ForegroundColor Gray
     Write-Fail "Cannot continue - fix the generator and re-run bootstrap."
 }
-Write-Ok "Log generator running (PID: $($process.Id))"
+Write-Ok "Log generator running (PID: $($generatorProcess.Id))"
+
+# --- Live attack map (geomap) ---
+
+if (Test-Path $geomapScript) {
+    Stop-ProcessByCommandLine "geomap"
+    Write-Info "Starting live attack map (port 8888)..."
+    $geomapLog = Join-Path $LOGS_DIR "geomap.log"
+    $geomapProcess = Start-Process $PYTHON_CMD `
+        -ArgumentList "-u", $geomapScript `
+        -RedirectStandardOutput $geomapLog `
+        -RedirectStandardError "$LOGS_DIR\geomap_error.log" `
+        -WindowStyle Hidden `
+        -PassThru
+    Start-Sleep -Seconds 2
+    if (-not $geomapProcess.HasExited) {
+        Write-Ok "Live attack map running (PID: $($geomapProcess.Id)) — http://localhost:8888"
+    } else {
+        Write-Warn "Attack map failed to start. Check: $geomapLog"
+    }
+} else {
+    Write-Warn "Geomap script not found — skipping attack map"
+}
 
 # ─────────────────────────────────────────
-# Step 7 — Smoke test: verify logs are flowing
+# Step 7 - Smoke test: verify logs are flowing
 # ─────────────────────────────────────────
-Write-Step "[7/7] Verifying end-to-end log flow..."
+Write-Step "[7/8] Verifying end-to-end log flow..."
 
 $smokeRetries = 10
 $smokeCount   = 0
@@ -359,6 +410,86 @@ if (-not $logsFlowing) {
 }
 
 # ─────────────────────────────────────────
+# Step 8 - Start OmniLog AI assistant
+# ─────────────────────────────────────────
+Write-Step "[8/8] Starting OmniLog AI assistant..."
+
+$mlLog      = Join-Path $LOGS_DIR "ml_service.log"
+$apiLog     = Join-Path $LOGS_DIR "omnilog_api.log"
+$uiLog      = Join-Path $LOGS_DIR "omnilog_ui.log"
+$mlSkip     = $false
+
+if (-not (Test-Path $modelFile)) {
+    Write-Warn "ML model not found: $modelFile"
+    Write-Host "       Skipping ML service - copy catnip_severity_model.pkl to the models\ folder" -ForegroundColor Yellow
+    $mlSkip = $true
+} else {
+    Write-Ok "ML model found"
+}
+
+# Kill any stale OmniLog processes
+Stop-ProcessByCommandLine "ml_service"
+Stop-ProcessByCommandLine "omnilog_api"
+Start-Sleep -Seconds 1
+
+if (-not $mlSkip) {
+    Write-Info "Starting ML service (port 5001)..."
+    $mlProcess = Start-Process $PYTHON_CMD `
+        -ArgumentList (Join-Path $SCRIPTS_DIR "ml_service.py") `
+        -RedirectStandardOutput $mlLog `
+        -RedirectStandardError "$LOGS_DIR\ml_service_error.log" `
+        -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 3
+    if (-not $mlProcess.HasExited) {
+        Write-Ok "ML service running (PID: $($mlProcess.Id))"
+    } else {
+        Write-Warn "ML service failed to start. Check: $mlLog"
+    }
+}
+
+Write-Info "Starting OmniLog API (port 5002)..."
+$apiProcess = Start-Process $PYTHON_CMD `
+    -ArgumentList (Join-Path $SCRIPTS_DIR "omnilog_api.py") `
+    -RedirectStandardOutput $apiLog `
+    -RedirectStandardError "$LOGS_DIR\omnilog_api_error.log" `
+    -WindowStyle Hidden -PassThru
+Start-Sleep -Seconds 3
+if (-not $apiProcess.HasExited) {
+    Write-Ok "OmniLog API running (PID: $($apiProcess.Id))"
+} else {
+    Write-Warn "OmniLog API failed to start. Check: $apiLog"
+}
+
+$omnilogUiPid = $null
+try {
+    $nodeVersion = node --version 2>&1
+    if (Test-Path $omnilogDir) {
+        if (-not (Test-Path (Join-Path $omnilogDir "node_modules"))) {
+            Write-Info "Installing OmniLog frontend dependencies (first run)..."
+            Push-Location $omnilogDir
+            npm install --silent 2>&1 | Out-Null
+            Pop-Location
+        }
+        Write-Info "Starting OmniLog frontend (port 5173)..."
+        $viteBin = Join-Path $omnilogDir "node_modules\.bin\vite.cmd"
+        $uiProcess = Start-Process $viteBin `
+            -ArgumentList "--port 5173" `
+            -WorkingDirectory $omnilogDir `
+            -RedirectStandardOutput $uiLog `
+            -WindowStyle Hidden -PassThru
+        Start-Sleep -Seconds 4
+        if (-not $uiProcess.HasExited) {
+            $omnilogUiPid = $uiProcess.Id
+            Write-Ok "OmniLog UI running (PID: $omnilogUiPid) - http://localhost:5173"
+        } else {
+            Write-Warn "OmniLog UI failed to start. Check: $uiLog"
+        }
+    }
+} catch {
+    Write-Warn "Node.js not found - skipping OmniLog frontend. Install from https://nodejs.org"
+}
+
+# ─────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────
 Write-Host ""
@@ -373,14 +504,19 @@ Write-Host ""
 Write-Host "  Graylog UI:    $GRAYLOG_URL"
 Write-Host "  Username:      admin"
 Write-Host "  Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)"
+Write-Host "  Attack Map:    http://localhost:8888"
+Write-Host "  OmniLog UI:    http://localhost:5173"
+Write-Host "  OmniLog API:   http://localhost:5002"
+Write-Host "  ML Service:    http://localhost:5001"
 Write-Host ""
-Write-Host "  Log generator: running in background (PID: $($process.Id))"
+Write-Host "  Log generator: running in background (PID: $($generatorProcess.Id))"
 Write-Host "  Generator log: $GENERATOR_LOG"
 Write-Host ""
 Write-Host "  To generate a security report:"
-Write-Host "    python scripts\report_generator.py"
+Write-Host "    $PYTHON_CMD scripts\report_generator.py"
 Write-Host ""
-Write-Host "  To stop all containers:"
+Write-Host "  To stop everything:"
+Write-Host "    Stop-Process -Name python -Force"
 Write-Host "    docker compose down"
 Write-Host ""
 Write-Host "============================================================="

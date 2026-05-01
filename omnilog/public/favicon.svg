@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Shield body -->
+  <path d="M16 2 L28 7 L28 17 C28 23.5 22.5 29 16 30 C9.5 29 4 23.5 4 17 L4 7 Z"
+        fill="#0f172a" stroke="#06b6d4" stroke-width="1.5"/>
+  <!-- Eye shape -->
+  <ellipse cx="16" cy="17" rx="7" ry="4.5" fill="none" stroke="#06b6d4" stroke-width="1.2"/>
+  <!-- Pupil -->
+  <circle cx="16" cy="17" r="2.2" fill="#06b6d4"/>
+  <!-- Inner glow dot -->
+  <circle cx="16" cy="17" r="0.9" fill="#e2f8ff"/>
+</svg>

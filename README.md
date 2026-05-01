@@ -5,15 +5,21 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-7-green)](https://mongodb.com)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docker.com)
 [![Python](https://img.shields.io/badge/Python-3.x-yellow)](https://python.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev)
 
 ---
 
-## Assessment Context
+## What This Project Is
 
-This project was built for the **Cyber Security Automation** module at the University of Roehampton.
+A fully operational AI-powered SIEM (Security Information and Event Management) system built for the **Cyber Security Automation** module at the University of Roehampton.
 
-**Work Role:** DCWF 511 — Cyber Defense Analyst
+The system monitors a fictional gaming company (Catnip Games International) and includes:
 
+- **Graylog** — real-time log ingestion, stream routing, dashboards, and rule-based alerting
+- **OmniLog** — AI-powered security analyst interface (React frontend + Flask API) powered by Claude
+- **ML Engine** — machine learning threat severity scoring and zero-day anomaly detection
+- **Live Attack Map** — real-time geographic visualisation of attack sources
+- **Log Generator** — simulates 300 game servers, player authentication, DDoS, and SSH attacks
 **Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats.
 
 **Assessment:** In-lab team demonstration with individual Q&A
@@ -115,56 +121,81 @@ Catnip-Siem/
 
 ## Prerequisites
 
-Before you begin, make sure you have the following installed:
+Install all of these before you begin. The bootstrap will check for them and tell you if anything is missing.
 
-| Tool | Purpose | Download |
+| Tool | Minimum Version | Download |
 |---|---|---|
-| Docker Desktop | Runs all containers | [docker.com](https://docker.com) |
-| Git | Clones the repository | [git-scm.com](https://git-scm.com) |
-| Python 3.x | Runs the scripts | [python.org](https://python.org) |
+| Docker Desktop | Latest | [docker.com](https://docker.com) |
+| Git | Any | [git-scm.com](https://git-scm.com) |
+| Python | 3.9+ | [python.org](https://python.org) |
+| Node.js | 18+ | [nodejs.org](https://nodejs.org) |
 
-> **Note for Windows users:** You also need WSL (Windows Subsystem for Linux). Open PowerShell as administrator and run:
-> ```
-> wsl --install
-> ```
-> Restart your computer after installation.
+> **Windows users:** Make sure Docker Desktop is fully started (taskbar icon shows "Engine running") before running the bootstrap. If you see "Starting the Docker Engine..." indefinitely, open Task Manager, end any `com.docker.backend.exe` processes, and restart Docker Desktop.
+
+> **Linux / WSL users:** The bootstrap sets the OpenSearch kernel parameter automatically, but you must run it with a user that has `sudo` access.
 
 ---
 
-## Quick Start — Fully Automated Setup
-
-The bootstrap scripts handle everything automatically — Docker startup, content pack installation (restoring all streams, dashboards, alert rules, and extractors), Python dependencies, the log generator, and an end-to-end smoke test that confirms logs are flowing before the script exits. One command and you have a fully running, self-verified SIEM.
+## Getting Started — Clone and Run
 
 ### Step 1 — Clone the repository
 
 ```bash
-git clone https://github.com/Captnfresh/Catnip-Siem.git
+git clone https://github.com/D-rank-developer/Catnip-Siem.git
 cd Catnip-Siem
 ```
 
 ### Step 2 — Create your environment file
 
 ```bash
+# Mac / Linux / WSL
 cp .env.example .env
+
+# Windows CMD
+copy .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
 ```
 
-Open `.env` and fill in the values shared privately with the team via WhatsApp:
+Open `.env` in any text editor and fill in the values:
 
-```
-GRAYLOG_PASSWORD_SECRET=
-GRAYLOG_ROOT_PASSWORD_SHA2=
-GRAYLOG_ADMIN_PASSWORD=
+```env
+# ── Graylog ──────────────────────────────────────────────────────
+# Random 64+ character string. Generate with: pwgen -N 1 -s 96
+GRAYLOG_PASSWORD_SECRET=change_me_to_a_random_64_char_string
+
+# SHA256 of your chosen admin password.
+# Mac/Linux: echo -n "YourPassword" | sha256sum
+# Windows:   (Get-FileHash -InputStream ([System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes("YourPassword"))) -Algorithm SHA256).Hash.ToLower()
+GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+
+# The SAME password in plaintext — needed by the bootstrap to call the Graylog API
+GRAYLOG_ADMIN_PASSWORD=admin
+
+# Leave as-is for local development
 GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
-OPENSEARCH_ADMIN_PASSWORD=
+
+# ── OpenSearch ───────────────────────────────────────────────────
+OPENSEARCH_ADMIN_PASSWORD=YourStrongPassword123!
+
+# ── Email alerts (optional — leave blank to disable) ─────────────
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
+
+# ── OmniLog AI (Claude) ──────────────────────────────────────────
+# Get your key at https://console.anthropic.com
+# Without this, OmniLog uses keyword-based analysis as a fallback
+ANTHROPIC_API_KEY=
 ```
 
-> **Why there are two Graylog password variables:** `GRAYLOG_ROOT_PASSWORD_SHA2` is the SHA-256 hash that Graylog uses to create the admin account at startup. `GRAYLOG_ADMIN_PASSWORD` is the matching plaintext value that the bootstrap script uses to authenticate against the Graylog API (for installing the content pack, verifying inputs, and running the smoke test). Both must refer to the same password — the plaintext in `GRAYLOG_ADMIN_PASSWORD` must produce the hash stored in `GRAYLOG_ROOT_PASSWORD_SHA2`.
+> **Important:** `GRAYLOG_ADMIN_PASSWORD` must be the exact plaintext whose SHA256 hash you put in `GRAYLOG_ROOT_PASSWORD_SHA2`. The example values above (`admin` / its SHA256 hash) work together — change both to something stronger in production.
 
-### Step 3 — Run the bootstrap script
+### Step 3 — Run the bootstrap
+
+The bootstrap script does everything: starts Docker, waits for Graylog, installs the content pack (restoring all streams, dashboards, alert rules, extractors), installs Python dependencies, starts the ML service, OmniLog API, log generator, frontend, and runs a smoke test.
 
 **Mac / Linux / WSL:**
 ```bash
@@ -172,7 +203,7 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-**Windows PowerShell:**
+**Windows PowerShell** (run as normal user, not administrator):
 ```powershell
 .\bootstrap.ps1
 ```
@@ -182,472 +213,487 @@ chmod +x bootstrap.sh
 bootstrap.bat
 ```
 
-The bootstrap script automatically:
-- Detects your operating system
-- Sets the required OpenSearch kernel setting on Linux/WSL (skipped on Mac/Windows)
-- Auto-fixes Windows CRLF line endings in `.env` if present (silent, no user action required)
-- Starts all three Docker containers
-- Waits for Graylog to become ready via the `/api/system/lbstatus` endpoint
-- Verifies API credentials against an authenticated endpoint before proceeding
-- Uploads and installs the content pack idempotently — skips upload if already present, looks up the pack ID by name after upload to avoid response-parsing bugs
-- Verifies at least one input is configured before continuing
-- Installs Python dependencies
-- Starts the log generator in the background
-- **Runs a built-in smoke test** — captures a baseline message count, then polls the Graylog API for 30 seconds to confirm new messages are being ingested
-
-**Expected output (truncated):**
+The script takes 2–4 minutes on first run (mostly waiting for Graylog and OpenSearch to initialise). You will see step-by-step progress:
 
 ```
 =============================================================
-   Catnip Games International — SIEM Bootstrap
+   Catnip Games International - SIEM Bootstrap (PowerShell)
 =============================================================
 
-[1/7] Detecting operating system...
-[OK] WSL (Windows Subsystem for Linux) detected
+[1/8] Checking dependencies...
+[OK] Docker found
+[OK] Python found: Python 3.12.x
 
-[2/7] Checking dependencies...
-[OK] Docker found: Docker version 29.x
-[OK] Docker Compose found
-[OK] Python3 found: Python 3.12.x
+[2/8] Checking Docker Desktop is running...
+[OK] Docker Desktop is running
 
-[3/7] Configuring system settings...
-[OK] vm.max_map_count already configured
-
-[4/7] Checking environment configuration...
+[3/8] Checking environment configuration...
 [OK] .env file found
 [OK] Graylog admin credentials loaded from .env
 
-[5/7] Starting Docker containers...
+[4/8] Starting Docker containers...
 [OK] Graylog is ready
 [OK] Graylog authentication verified
 
-[6/7] Installing Graylog content pack...
-[OK] Content pack uploaded
+[5/8] Installing Graylog content pack...
 [OK] Content pack installed — streams, alerts, dashboards, inputs, notifications restored
 [OK] 3 Graylog input(s) configured
 
-[7/7] Starting log generator and verifying end-to-end flow...
-[OK] Python dependencies ready
-[..] Baseline message count: 0
+[6/8] Installing Python dependencies and starting background services...
+[OK] Python dependencies installed
 [OK] Log generator running (PID: XXXXX)
-[OK] Logs flowing: 3 new messages ingested (total: 3)
+[OK] Live attack map running — http://localhost:8888
+
+[7/8] Verifying end-to-end log flow...
+[OK] Logs flowing: 47 new messages ingested (total: 47)
+
+[8/8] Starting OmniLog AI assistant...
+[OK] ML model found
+[OK] ML service running (PID: XXXXX)
+[OK] OmniLog API running (PID: XXXXX)
+[OK] OmniLog UI running (PID: XXXXX) — http://localhost:5173
 
 =============================================================
    Bootstrap complete — SIEM is fully operational!
 =============================================================
+
+  Graylog UI:    http://localhost:9000
+  Username:      admin
+  Password:      (from GRAYLOG_ADMIN_PASSWORD in .env)
+  Attack Map:    http://localhost:8888
+  OmniLog UI:    http://localhost:5173
+  OmniLog API:   http://localhost:5002
+  ML Service:    http://localhost:5001
 ```
 
-The final green `Logs flowing` line is the script verifying its own success — if this line appears, the SIEM is end-to-end operational and no manual intervention is required.
+### Step 4 — Open the interfaces
 
-### Step 4 — Verify everything is running
-
-```bash
-docker compose ps
-```
-
-All three containers should show `Up`:
-
-```
-NAME                IMAGE                                    STATUS
-catnip-graylog      graylog/graylog:6.1                     Up (healthy)
-catnip-mongodb      mongo:7                                  Up
-catnip-opensearch   opensearchproject/opensearch:2.15.0     Up
-```
-
-### Step 5 — Access Graylog
-
-Open your browser and go to `http://localhost:9000`
-
-Log in with username `admin` and the password from `GRAYLOG_ADMIN_PASSWORD` in your `.env` file.
-
-### Step 6 — Configure rsyslog for real SSH logs (Linux/WSL only)
-
-This step forwards real SSH authentication events from your machine into Graylog. Skip this step on Mac or Windows.
-
-```bash
-sudo apt update && sudo apt install -y rsyslog openssh-server
-sudo nano /etc/rsyslog.d/60-graylog.conf
-```
-
-Paste this:
-
-```
-auth,authpriv.* action(
-  type="omfwd"
-  target="127.0.0.1"
-  port="1514"
-  protocol="tcp"
-)
-```
-
-Save with `Ctrl+X`, `Y`, `Enter`, then restart:
-
-```bash
-sudo systemctl restart rsyslog
-sudo service ssh start
-```
-
-### Step 7 — Generate a security report
-
-```bash
-export GRAYLOG_PASS=your_admin_password
-python3 scripts/report_generator.py
-```
-
-The report is saved to `reports/security_report_YYYY-MM-DD_HH-MM.txt` and printed to the terminal.
-
----
-
-## Dashboards
-
-Five dashboards answer specific security questions about the Catnip Games environment:
-
-| Dashboard | Security question it answers | Key widgets |
-|---|---|---|
-| Security Overview | What is the overall threat picture today? | Total events, timeline, event type breakdown, critical count |
-| SSH Auth Monitoring | Are we under SSH brute force attack? | Failed logins over time, top attacking IPs, targeted usernames |
-| Game Server Health | Are our game servers under DDoS attack? | DDoS over time, targeted servers, normal vs attack traffic |
-| Player Auth Monitoring | Are player accounts being compromised? | Login outcomes, targeted players, credential stuffing timeline |
-| Dev Environment Security | Has anyone accessed our dev servers suspiciously? | Dev SSH activity, suspicious logins, targeted accounts |
-
-> **Using the Global Override:** The time selector at the top of each dashboard controls all 20 widgets simultaneously. Change it to see different time perspectives — last hour, last 24 hours, last 7 days — in one click.
-
----
-
-## Alert Rules
-
-Four automated alert rules fire email notifications when threats are detected:
-
-### Alert 1 — SSH Brute Force Detection
-- **Triggers when:** A single IP generates 10+ failed SSH logins within 5 minutes
-- **Why this threshold:** Fewer than 10 could be a legitimate user mistyping their password. 10+ indicates automated password guessing tools.
-- **Immediate response:** Block the IP, review targeted usernames, check for successful logins from same IP
-
-### Alert 2 — DDoS Attack Detected
-- **Triggers when:** Any single DDoS event is detected
-- **Why immediate trigger:** There is no safe threshold for DDoS. Any detection event requires immediate response.
-- **Immediate response:** Activate DDoS mitigation, block source IP, enable rate limiting
-
-### Alert 3 — Credential Stuffing Attack
-- **Triggers when:** A single IP generates 20+ credential stuffing attempts within 5 minutes
-- **Why this threshold:** 20 was chosen to distinguish automated tooling from normal high-volume player activity
-- **Immediate response:** Block IP, force password reset for targeted accounts, enable CAPTCHA
-
-### Alert 4 — Suspicious Dev SSH Login
-- **Triggers when:** Any suspicious login to a developer server is detected
-- **Why immediate trigger:** Dev servers contain source code and deployment credentials. Any suspicious access is a potential full infrastructure compromise.
-- **Immediate response:** Revoke access immediately, review session, check for lateral movement
-
----
-
-## Log Generator — What It Simulates and Why
-
-Since physical access to 300 game servers is not available in this prototype, a Python script simulates the log traffic those servers would generate. This is standard practice in security engineering — synthetic log generation is used to test and validate SIEM configurations before real infrastructure is connected. The log formats, field structures, and event types are identical to what real servers would produce.
-
-The generator sends 8 event types via GELF UDP to Graylog:
-
-| Event type | Description | Severity |
-|---|---|---|
-| player_auth success | Player logged in successfully | Info |
-| player_auth failed | Player login failed | Warning |
-| game_traffic normal | Normal game server traffic | Info |
-| game_traffic ddos | DDoS attack detected | Critical |
-| dev_ssh normal | Engineer logged into dev server | Info |
-| dev_ssh suspicious | Suspicious dev server login | Critical |
-| player_auth credential_stuffing | Credential stuffing burst | Critical |
-| sshd brute force | SSH brute force from attacker IP | Critical |
-
-> **Day/night simulation:** The generator adjusts event weights by time of day. During business hours (8am–10pm) legitimate activity dominates. At night, attack patterns increase — reflecting real-world attacker behaviour patterns documented in threat intelligence research.
-
----
-
-## Automated Report
-
-The report generator queries the Graylog REST API and produces a formatted weekly security summary. This addresses the assessment requirement for automation beyond dashboards — the report can be scheduled via cron to run automatically.
-
-Report sections:
-- Executive summary with calculated risk level
-- SSH authentication analysis with failure rate percentage
-- Player authentication analysis
-- Top 10 attacking IP addresses ranked by event count
-- Most targeted usernames
-- Most targeted game servers
-- Recent DDoS incidents with timestamps and traffic volumes
-- Dynamic security recommendations triggered by threshold breaches
-
-Risk levels are calculated automatically based on critical event volume:
-
-| Critical events | Risk level |
+| URL | What it is |
 |---|---|
-| > 10,000 | CRITICAL — Immediate investigation required |
-| > 5,000 | HIGH — Elevated threat activity detected |
-| > 1,000 | MEDIUM — Monitor closely |
-| < 1,000 | LOW — Normal activity levels |
+| http://localhost:9000 | Graylog — dashboards, streams, alert rules, raw log search |
+| http://localhost:5173 | OmniLog — AI analyst, zero-day alerts, threat reports |
+| http://localhost:8888 | Live attack map — geographic threat visualisation |
+| http://localhost:5002/status | OmniLog API health check (JSON) |
+
+Log into Graylog with username `admin` and the password from `GRAYLOG_ADMIN_PASSWORD` in your `.env`.
 
 ---
 
-## OS Compatibility
+## After a Restart
 
-| Environment | Supported | Bootstrap script |
+When you close your laptop, shut down, or restart WSL, Docker containers stop and the Python processes die. Run the bootstrap again — it is safe to run repeatedly and skips any steps that are already done (content pack, npm install, etc.).
+
+```bash
+./bootstrap.sh        # Mac / Linux / WSL
+.\bootstrap.ps1       # Windows PowerShell
+```
+
+Or restart manually if you prefer:
+
+```bash
+# 1. Start Docker containers
+docker compose up -d
+
+# 2. Install Python deps (first time only)
+pip install -r ml/requirements.txt
+
+# 3. Start ML service (background)
+python scripts/ml_service.py &          # Mac/Linux
+Start-Process python scripts/ml_service.py  # Windows PowerShell
+
+# 4. Start OmniLog API (background)
+python scripts/omnilog_api.py &
+Start-Process python scripts/omnilog_api.py
+
+# 5. Start log generator (background)
+python scripts/log_generator.py &
+Start-Process python scripts/log_generator.py
+
+# 6. Start OmniLog frontend (background, from the omnilog/ directory)
+cd omnilog && npm run dev &
+cd omnilog; npm run dev   # PowerShell (run in separate terminal)
+```
+
+---
+
+## Stopping Everything
+
+```bash
+# Stop the Python services
+pkill -f log_generator.py       # Mac/Linux/WSL
+pkill -f geomap.py
+pkill -f ml_service.py
+pkill -f omnilog_api.py
+pkill -f vite
+
+# Windows PowerShell equivalent
+Stop-Process -Name python -Force
+
+# Stop the Vite dev server (if running in its own terminal, just Ctrl+C)
+
+# Stop Docker containers
+docker compose down
+```
+
+To also delete all stored log data and start completely fresh:
+```bash
+docker compose down -v    # WARNING: deletes all Graylog data
+```
+
+---
+
+## OmniLog AI Assistant
+
+OmniLog is the React-based security analyst interface. It connects to Claude (Anthropic API) to answer natural-language questions about your logs.
+
+### Asking questions
+
+Type any security question in plain English:
+
+- `"Show me all failed logins in the last hour"`
+- `"Is there a brute force attack happening right now?"`
+- `"What are the top attacking IP addresses?"`
+- `"Explain what's happening with the game servers"`
+- `"Are there any signs of credential stuffing?"`
+
+Claude will query Graylog, score events through the ML engine, and reply in plain English with findings, severity, and recommended actions.
+
+### Sidebar quick filters
+
+Click any category in the left sidebar to expand a live event dropdown:
+
+| Filter | What it shows |
+|---|---|
+| Failed Logins | Authentication failures, brute force attempts |
+| Errors | Critical/error-level system events |
+| Network Activity | Firewall, DNS, and network traffic anomalies |
+| Suspicious Behaviour | Unusual login patterns, lateral movement indicators |
+| Zero-Day Alerts | ML-detected threats with no matching Graylog rule |
+
+Each event card is clickable — clicking it sends that event to Claude for immediate investigation.
+
+### Zero-Day Alerts
+
+The Zero-Day panel runs IsolationForest (unsupervised ML) over the last 200 events. It surfaces two types of threats Graylog's rule-based system cannot catch:
+
+1. **Zero-day anomalies** — events that deviate significantly from learned baseline behaviour
+2. **High-confidence ML detections** — events the ML classifier rates as high/critical severity even though no Graylog alert rule fired
+
+Each threat card shows:
+- **ML assessment** — what the ML model detected, with confidence percentage
+- **Graylog assessment** — what Graylog's rule-based system saw for the same event
+- **Delta** — a plain-English explanation of the difference (e.g. "Graylog classified as 'Normal Traffic [info]' but ML identified 'SSH Brute Force' with 87% confidence. Severity escalated by ML: info → high.")
+
+### Print Report
+
+Click **Print Report** in the top-right corner to generate a full security report:
+
+1. Select a time range (Last 1 hour / 6 hours / 24 hours / 7 days, or custom From/To timestamps)
+2. Click **Generate & Print Report**
+3. OmniLog fetches up to 10,000 logs from Graylog, runs ML scoring on 200 representative events, maps detected threats to CVEs, and generates a remediation plan
+4. A print-ready report opens in a new window with an executive summary, threat breakdown, CVE mappings, and step-by-step remediation
+
+---
+
+## ML Engine
+
+The ML engine runs as a separate Flask service on port 5001. It provides two models:
+
+| Model | Type | Purpose |
 |---|---|---|
-| Windows + WSL | Yes | `./bootstrap.sh` |
-| Windows PowerShell | Yes | `.\bootstrap.ps1` |
-| Windows CMD | Yes | `bootstrap.bat` |
-| Mac + Docker Desktop | Yes | `./bootstrap.sh` |
-| Native Linux | Yes | `./bootstrap.sh` |
+| Severity classifier | Gradient Boosting | Rates each log event as info/low/medium/high/critical/emergency |
+| Zero-day detector | IsolationForest | Detects anomalous events with no known attack signature |
 
-> The only OS-specific difference is the OpenSearch `vm.max_map_count` kernel setting. The bootstrap scripts detect the OS and handle this automatically — Mac and Windows Docker Desktop manage this internally, Linux and WSL require explicit configuration.
+The IsolationForest auto-trains on the first 200+ live Graylog events when you open the Zero-Day Alerts panel. No pre-training required.
+
+The pre-trained severity model (`models/catnip_severity_model.pkl`) ships with the repository. If it is missing, the ML service still starts but zero-day detection will be the only available function.
+
+---
+
+## Architecture
+
+```
+                        ┌─────────────────────────────┐
+                        │  OmniLog UI  (React/Vite)   │
+                        │     http://localhost:5173    │
+                        └──────────────┬──────────────┘
+                                       │ /omnilog-api proxy
+                        ┌──────────────▼──────────────┐
+                        │   OmniLog API  (Flask 5002)  │
+                        │  Claude claude-opus-4-7      │
+                        └───┬──────────────┬──────────┘
+                            │              │
+           ┌────────────────▼──┐    ┌──────▼──────────────┐
+           │  Graylog 6.1       │    │  ML Service (5001)  │
+           │  :9000 (HTTP)      │    │  Severity + ZeroDay │
+           │  :12201 (GELF TCP) │    └─────────────────────┘
+           │  :1514  (Syslog)   │
+           └────────┬──────────┘
+                    │ OpenSearch protocol
+           ┌────────▼──────────┐
+           │  OpenSearch 2.15  │
+           │  (log storage)    │
+           └───────────────────┘
+           ┌───────────────────┐
+           │   MongoDB 7       │
+           │  (Graylog config) │
+           └───────────────────┘
+           ┌───────────────────┐
+           │  Log Generator    │
+           │  (Python / GELF   │
+           │   TCP → :12201)   │
+           └───────────────────┘
+```
+
+> **Important — GELF TCP not UDP:** Docker Desktop on Windows silently drops UDP port forwarding for port 12201. The log generator uses GELF over TCP (null-byte delimited) which Docker Desktop forwards reliably. The Graylog content pack includes a GELF TCP input on port 12201. Do not change this to UDP — messages will be silently lost.
+
+---
+
+## Repository Structure
+
+```
+Catnip-Siem/
+├── docker-compose.yml              # Full stack definition
+├── .env.example                    # Environment variable template
+├── bootstrap.sh                    # One-command setup — Mac, Linux, WSL
+├── bootstrap.ps1                   # One-command setup — Windows PowerShell
+├── bootstrap.bat                   # One-command setup — Windows CMD
+│
+├── scripts/
+│   ├── log_generator.py            # Simulates Catnip Games infrastructure
+│   │                               # (GELF TCP → Graylog port 12201)
+│   ├── omnilog_api.py              # Flask API — Claude + Graylog + ML bridge
+│   ├── ml_service.py               # Flask ML service (port 5001)
+│   └── report_generator.py        # CLI security report
+│
+├── ml/
+│   ├── model.py                    # GradientBoosting severity classifier
+│   ├── zero_day.py                 # IsolationForest zero-day detector
+│   └── requirements.txt            # Python dependencies for all services
+│
+├── models/
+│   └── catnip_severity_model.pkl   # Pre-trained severity model
+│
+├── omnilog/                        # React frontend
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── AppSidebar.tsx      # Sidebar with live event dropdowns
+│   │   │   ├── TopBar.tsx          # Print Report button + time range picker
+│   │   │   ├── PrintReport.tsx     # Report modal + print window generator
+│   │   │   └── RiskGauge.tsx       # Animated risk score gauge
+│   │   └── lib/api.ts              # API client (typed fetch wrappers)
+│   ├── public/favicon.svg          # OmniLog shield/eye icon
+│   └── index.html                  # App entry point
+│
+├── content-packs/
+│   └── catnip-siem-pack.json       # Full Graylog config snapshot
+│                                   # (streams, alerts, dashboards, inputs,
+│                                   #  extractors, notifications)
+├── geomap/
+│   └── geomap.py                   # Live attack map (Flask, port 8888)
+│
+└── docs/
+    ├── platform-setup.md
+    ├── log-ingestion.md
+    ├── alert-rules.md
+    └── dashboards.md
+```
+
+---
+
+## Environment Variables Reference
+
+| Variable | Required | Description |
+|---|---|---|
+| `GRAYLOG_PASSWORD_SECRET` | Yes | Random 64+ char string for Graylog encryption |
+| `GRAYLOG_ROOT_PASSWORD_SHA2` | Yes | SHA256 hash of the admin password |
+| `GRAYLOG_ADMIN_PASSWORD` | Yes | Plaintext admin password (must match hash above) |
+| `GRAYLOG_HTTP_EXTERNAL_URI` | Yes | `http://localhost:9000/` for local dev |
+| `OPENSEARCH_ADMIN_PASSWORD` | Yes | Min 8 chars, 1 uppercase, 1 number, 1 special char |
+| `SMTP_HOST` | No | Email server for alert notifications |
+| `SMTP_PORT` | No | Usually 587 for TLS |
+| `SMTP_USER` | No | Email address for sending alerts |
+| `SMTP_PASSWORD` | No | Email password or app-specific password |
+| `ANTHROPIC_API_KEY` | No | Enables Claude AI in OmniLog (falls back to keyword matching without it) |
+| `GRAYLOG_HOST` | No | Defaults to `localhost` |
+| `GRAYLOG_PORT` | No | Defaults to `9000` |
+| `ML_SERVICE_URL` | No | Defaults to `http://localhost:5001` |
+| `OMNILOG_PORT` | No | Defaults to `5002` |
+
+---
+
+## Graylog Content Pack
+
+The content pack (`content-packs/catnip-siem-pack.json`) is a complete snapshot of the Graylog configuration. The bootstrap installs it automatically. It restores:
+
+- **3 inputs** — GELF TCP (port 12201), Syslog TCP (port 1514), Syslog UDP (port 1514)
+- **5 streams** — Game Servers, Player Auth, SSH Auth, Dev Environment, All Events
+- **4 alert rules** — SSH Brute Force, DDoS, Credential Stuffing, Suspicious Dev Login
+- **5 dashboards** — Security Overview, SSH Auth Monitoring, Game Server Health, Player Auth, Dev Environment
+- **Extractors** — parse `action`, `event_type`, `severity`, `source_ip`, `target_user` from raw messages
+- **Notifications** — email alerts via configured SMTP
+
+If the content pack install fails, you can install it manually: **Graylog UI → System → Content Packs → Upload** → select `content-packs/catnip-siem-pack.json` → Install.
 
 ---
 
 ## Troubleshooting
 
-### Problem 1 — Docker Desktop stuck on "Starting the Docker Engine"
+### OmniLog shows "DISCONNECTED" or active alerts is 0
 
-**What happened:**
-On Windows, Docker Desktop showed "Starting the Docker Engine..." indefinitely and never became ready.
-
-**What caused it:**
-A lingering `com.docker.backend.exe` process from a previous session was blocking Docker Desktop from starting cleanly.
-
-**How we fixed it:**
-When Docker Desktop showed the "Lingering processes detected" popup, we clicked **"Stop processes"**. Docker Desktop then started successfully within 2–3 minutes.
-
-**What it taught us:**
-Always fully quit Docker Desktop using the system tray icon before restarting Windows — closing the window does not stop the background engine.
-
-> **Alternative fix:** Open Task Manager → find `com.docker.backend.exe` → End task → restart Docker Desktop.
-
----
-
-### Problem 2 — OpenSearch container keeps restarting
-
-**What happened:**
-After `docker compose up -d`, the OpenSearch container showed `Restarting (1)` repeatedly instead of `Up`.
-
-**What caused it:**
-The Linux kernel setting `vm.max_map_count` was too low. OpenSearch requires at least 262144 — the Linux default is 65536.
-
-**How we fixed it:**
-```bash
-sudo sysctl -w vm.max_map_count=262144
-echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
-```
-
-**What it taught us:**
-OpenSearch memory-maps large index files for performance. This is a documented requirement and the most common cause of OpenSearch startup failure. The bootstrap script now handles this automatically.
-
----
-
-### Problem 3 — Graylog stays unhealthy and cannot reach OpenSearch
-
-**What happened:**
-Graylog logs showed repeated connection failures to `127.0.0.1:9200`. Container showed `(unhealthy)`.
-
-**What caused it:**
-Inside a Docker container, `127.0.0.1` refers to the container itself — not the host or other containers. Graylog was trying to reach OpenSearch on its own loopback address.
-
-**How we fixed it:**
-```yaml
-GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
-```
-
-Docker's internal DNS resolves service names on the `catnip-net` network automatically.
-
-**What it taught us:**
-Docker containers must communicate using service names defined in `docker-compose.yml`, not IP addresses or localhost. This is a fundamental Docker networking concept.
-
----
-
-### Problem 4 — SSH extractor showing mixed case values
-
-**What happened:**
-The `action` field showed both `Failed` (from rsyslog) and `failed` (from GELF generator). Dashboard queries using `action:failed` missed real SSH events. Widgets showed duplicate legend entries.
-
-**What caused it:**
-Real SSH logs from rsyslog use title case. The Python generator used lowercase. The extractor captured values as-is with no normalisation.
-
-**How we fixed it:**
-```
-Regex: (?i)(failed|accepted|invalid)
-Converter: Lowercase string
-```
-
-**What it taught us:**
-Log normalisation is critical when ingesting from multiple sources. Inconsistent field values silently break queries and dashboards. Extractors should always normalise to a consistent format — this is why the lowercase converter exists.
-
----
-
-### Problem 5 — GitHub push rejected due to email privacy
-
-**What happened:**
-`git push` returned `GH007: Your push would publish a private email address`.
-
-**How we fixed it:**
-```bash
-git config --global user.email "username@users.noreply.github.com"
-git commit --amend --reset-author --no-edit
-git push
-```
-
-**What it taught us:**
-GitHub provides a no-reply address specifically for this. Use it to keep personal email addresses private while still attributing commits correctly.
-
----
-
-### Problem 6 — Team member could not push to repository
-
-**What happened:**
-Authentication errors on `git push` despite correct password entry. Two separate issues:
-
-**Issue A — Collaborator invitation not accepted:**
-GitHub requires explicit acceptance of the collaborator invitation before granting push access.
-
-**Fix:** Check email for GitHub invitation → Accept → retry push.
-
-**Issue B — Personal Access Token missing repo scope:**
-Token was generated without ticking the `repo` checkbox. A token without repo scope silently fails on push.
-
-**Fix:**
-```
-GitHub → Settings → Developer settings → Personal access tokens
-→ Tokens (classic) → Generate new token → tick repo → copy immediately
-```
-
-**What it taught us:**
-GitHub removed password authentication for Git operations in 2021. PATs are required. The scope selection is critical — a token without the right scope gives no error message, it just fails silently.
-
----
-
-### Problem 7 — Bootstrap returned HTTP 401 when installing the content pack
-
-**What happened:**
-The bootstrap script reached the Graylog API successfully and confirmed Graylog was healthy, but every call to install the content pack came back with `HTTP 401 Unauthorized`. The same admin credentials worked fine when entered manually via the web UI.
-
-**What caused it:**
-An early version of the bootstrap read the password from the wrong variable in `.env`. The script was loading `GRAYLOG_ROOT_PASSWORD_SHA2` — the SHA-256 hash — and passing that hash as the plaintext password in `curl -u admin:<hash>`. HTTP Basic Auth expects the plaintext, and Graylog hashes it internally before comparison. Sending an already-hashed value meant Graylog hashed the hash and compared it to the stored hash, which never matched. The script effectively locked itself out despite having valid credentials available.
-
-**How we fixed it:**
-We introduced a dedicated `GRAYLOG_ADMIN_PASSWORD` variable in `.env` for the plaintext value, alongside the existing `GRAYLOG_ROOT_PASSWORD_SHA2` for the hash that Graylog itself consumes at startup. The bootstrap now reads the plaintext variable for its API calls, and a new validation step calls an authenticated endpoint (`/api/users`) immediately after Graylog becomes ready — if that returns anything other than 200, the script stops with a clear error pointing at the credential mismatch.
-
-**What it taught us:**
-SHA-256 is one-way. If a process needs to authenticate programmatically, it needs the plaintext stored somewhere accessible, and that plaintext must match the pre-hashed value the server was configured with. "I can see the hash in `.env`" is not the same as "the script has the password" — they serve different consumers. The fix also reinforced the value of testing credentials against an authenticated endpoint explicitly, rather than relying on unauthenticated health checks like `/api/system/lbstatus` which return 200 regardless of credentials.
-
----
-
-### Problem 8 — Windows line endings in `.env` caused silent authentication failure
-
-**What happened:**
-After adding `GRAYLOG_ADMIN_PASSWORD=CatnipAdmin@2026` to `.env`, the bootstrap still failed with HTTP 401 on every API call. The same password worked perfectly when copy-pasted into a manual `curl` command. Looking at the file, the password line looked completely normal.
-
-**What caused it:**
-The `.env` file was edited from a Windows-mounted WSL directory (`/mnt/c/Users/...`). Text files created or edited on Windows filesystems often save with CRLF line endings (`\r\n`) rather than Unix LF (`\n`). When the bootstrap's `grep | cut` extraction pulled the password value, it silently included the trailing carriage return. The script was literally sending `curl -u admin:CatnipAdmin@2026\r` to Graylog — a password that didn't match anything. Because `\r` is invisible when printing with `echo`, the password looked correct everywhere we checked.
-
-**How we diagnosed it:**
-```bash
-grep GRAYLOG_ADMIN_PASSWORD .env | cat -A
-# Output: GRAYLOG_ADMIN_PASSWORD=CatnipAdmin@2026^M$
-```
-The `^M` before the `$` end-of-line marker is the carriage return byte — the smoking gun.
-
-**How we fixed it:**
-First, a one-shot cleanup of the affected file:
-```bash
-sed -i 's/\r$//' .env
-```
-Then we hardened the bootstrap itself. The script now auto-detects CRLF in `.env` on every run and strips it silently before reading any values. The password extraction helper also explicitly pipes through `tr -d '\r'` as a belt-and-braces guard. This means the bootstrap works regardless of what line endings the `.env` was saved with — a teammate editing on Windows won't trip the same bug.
-
-**What it taught us:**
-Cross-platform config parsing is a real hazard that doesn't show up until someone runs the code from a different environment than the author did. Unicode-whitespace bugs are especially nasty because the culprit is invisible in normal output. `cat -A` (or `od -c`) exposes these hidden characters — it's the first thing to reach for when two seemingly-identical strings refuse to match.
-
----
-
-### Problem 9 — Docker volumes surviving `docker compose down -v` on WSL
-
-**What happened:**
-After a successful bootstrap run, we ran `docker compose down -v` to reset and retry. The command reported all three volumes as `Removed`. We then ran `docker compose up -d` again and re-ran the bootstrap, expecting a clean Graylog. Instead, we saw duplicate streams (four copies of `game_server`, four copies of `ssh-auth`) and nine inputs where there should have been three. Each fresh run appeared to add one more copy of every entity. Direct MongoDB queries confirmed three full installation records existed even on a "fresh" Graylog that had never been touched.
-
-**What caused it:**
-The machine had two separate Docker engines running side by side — Docker Desktop on the Windows host, and a docker daemon inside the WSL distribution. Containers and volumes created through one engine are invisible to the other. `docker compose down -v` run from inside WSL was cleaning up WSL's Docker, while Docker Desktop still held the old containers and their volumes. When `docker compose up -d` ran next, the containers it created bound back to the pre-existing volumes, rehydrating the old Graylog state — accumulated content pack installations and all.
-
-**How we diagnosed it:**
-```bash
-docker ps -a | grep catnip
-# Listed containers with 3-day-old creation timestamps
-docker volume ls | grep catnip
-# Volumes still present after supposedly successful "down -v"
-```
-Running the same commands from Windows CMD against Docker Desktop showed a different set of containers and volumes entirely, confirming the split-brain.
-
-**How we fixed it:**
-One-time cleanup — delete the orphaned containers and volumes from both engines:
-```bash
-# Inside WSL
-docker rm -f catnip-graylog catnip-mongodb catnip-opensearch
-docker volume rm catnip-siem_graylog_data catnip-siem_mongodb_data catnip-siem_opensearch_data
-```
-Going forward, we standardised on running everything from WSL (where the bootstrap lives) and stopped invoking Docker commands from Windows CMD. When `docker compose down -v` completes, we now verify with `docker volume ls | grep catnip` — if anything remains, we force-remove it explicitly before the next `up`.
-
-**What it taught us:**
-On Windows, having WSL installed plus Docker Desktop can create two independent Docker contexts depending on how Docker Desktop is configured. A command that appears to succeed in one context can leave artefacts in the other, producing state-drift that looks like a bug in whatever you're running. When a clean-looking environment keeps behaving like a stale one, check whether you're actually talking to the daemon you think you are — `docker context ls` shows which one is active. We also added a self-verifying smoke test to the bootstrap specifically so this class of environmental ghost becomes visible in the script output rather than in confused debugging hours later.
-
----
-
-## Restarting After a Break
-
-When you close your laptop or restart WSL, all containers stop and the log generator process dies. Run these commands to restore everything:
+Check that all services are running:
 
 ```bash
-cd ~/catnip-siem
-
-# Start containers
-docker compose up -d
-
-# Verify health
+# Check Docker containers
 docker compose ps
 
-# Restart log generator
-export GRAYLOG_PASS=your_admin_password
-nohup python3 scripts/log_generator.py > logs/generator.log 2>&1 &
+# Check Python services
+ps aux | grep -E "ml_service|omnilog_api|log_generator"    # Mac/Linux
+wmic process where "name like '%python%'" get CommandLine   # Windows
 
-# Open Graylog
-# http://localhost:9000
+# Check OmniLog API status
+curl http://localhost:5002/status
 ```
+
+Expected output from the status check:
+```json
+{
+  "graylog_connected": true,
+  "ml_service_connected": true,
+  "active_alerts": 12,
+  "risk_score": 48,
+  "total_events_last_hour": 150
+}
+```
+
+If `total_events_last_hour` is 0 or very low, the log generator is not reaching Graylog. Restart it:
+
+```bash
+# Mac/Linux/WSL
+pkill -f log_generator.py
+python scripts/log_generator.py > logs/generator.log 2>&1 &
+
+# Windows PowerShell
+Stop-Process -Name python -Force
+Start-Process python -ArgumentList "scripts/log_generator.py"
+```
+
+### "graylog_connected: false"
+
+1. Make sure the Docker containers are running: `docker compose ps`
+2. Try opening http://localhost:9000 in a browser — if it loads, Graylog is up
+3. Check your `.env` has `GRAYLOG_ADMIN_PASSWORD` set to the correct plaintext password
+4. Restart the OmniLog API: kill its process and run `python scripts/omnilog_api.py` again
+
+### Graylog receives 0 logs (total_events_last_hour stays 0)
+
+This is almost always a GELF TCP delivery issue. Verify:
+
+```bash
+# Check that TCP 12201 is listening
+netstat -an | grep 12201
+
+# You should see a TCP LISTENING line, e.g.:
+# TCP    0.0.0.0:12201    0.0.0.0:0    LISTENING
+```
+
+If you only see `UDP 0.0.0.0:12201` but no TCP line, run `docker compose up -d` to recreate the container (which now maps TCP 12201) and then create the GELF TCP input in Graylog: **System → Inputs → Launch new input → GELF TCP → port 12201 → Global → Save**.
+
+### OpenSearch container keeps restarting
+
+```bash
+# Linux/WSL only — set the required kernel parameter
+sudo sysctl -w vm.max_map_count=262144
+echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
+docker compose up -d
+```
+
+On Mac and Windows, Docker Desktop manages this automatically.
+
+### OmniLog UI shows blank screen or won't load
+
+```bash
+# Make sure npm dependencies are installed
+cd omnilog
+npm install
+npm run dev
+```
+
+If you see TypeScript errors, try clearing the Vite cache:
+```bash
+cd omnilog
+rm -rf node_modules/.vite
+npm run dev
+```
+
+### Graylog shows duplicate streams or inputs after reinstall
+
+This happens when `docker compose down -v` is run from one Docker context (e.g. WSL) while Docker Desktop was managing the containers. Run:
+
+```bash
+docker rm -f catnip-graylog catnip-mongodb catnip-opensearch
+docker volume rm catnip-siem_graylog_data catnip-siem_mongodb_data catnip-siem_opensearch_data
+docker compose up -d
+./bootstrap.sh
+```
+
+### OmniLog falls back to mock data / no Claude responses
+
+Set `ANTHROPIC_API_KEY` in your `.env` file. Get a key at https://console.anthropic.com. Without it, the chat interface still works but uses keyword-based analysis instead of Claude.
 
 ---
 
-## Project Team
+## Dashboards
 
-| Name | Role | Contribution |
-|---|---|---|
-| Adebowale (Team Lead) | Architecture & Python | Docker infrastructure, log generator, report script, bootstrap scripts, project coordination, led the end-to-end debugging and validation session |
-| Stephen | UI Platform | Graylog platform deployment and maintenance |
-| Lekan | Log Ingestion | Inputs, extractors, rsyslog configuration, streams |
-| Faith | Alerts | Event definitions, notifications, remediation procedures |
-| Akhamas | Dashboards | 5 dashboards, 20 widgets, visualisation design |
-| Chamberlain | Documentation & Debugging | README, process documentation, GitHub repo structure, co-led the end-to-end debugging and validation session with Adebowale and reproducing the bootstrap on a clean environment, diagnosing the authentication, line-ending, and Docker-state issues documented in Problems 7–9, and verifying the final fixes |
+Five dashboards answer specific security questions:
+
+| Dashboard | What it shows |
+|---|---|
+| Security Overview | Overall threat picture — event totals, timeline, type breakdown |
+| SSH Auth Monitoring | Brute force attacks — failed logins over time, attacking IPs, targeted usernames |
+| Game Server Health | DDoS attacks — traffic anomalies, targeted servers, attack timeline |
+| Player Auth Monitoring | Credential stuffing — login outcomes, targeted players |
+| Dev Environment Security | Dev server access — suspicious logins, targeted accounts |
+
+---
+
+## Alert Rules
+
+Four automated alerts fire email notifications when thresholds are crossed:
+
+| Alert | Trigger condition |
+|---|---|
+| SSH Brute Force | 10+ failed SSH logins from one IP within 5 minutes |
+| DDoS Attack | Any DDoS event detected (immediate, no threshold) |
+| Credential Stuffing | 20+ stuffing attempts from one IP within 5 minutes |
+| Suspicious Dev Login | Any suspicious login to a developer server |
 
 ---
 
 ## Known Limitations
 
-**Log count cap:**
-The Graylog API returns a maximum of 10,000 messages per query. Event counts in the automated report that show exactly 10,000 are likely higher in reality. This is a Graylog API constraint, not a bug.
+**GELF UDP silently dropped on Windows:** Docker Desktop on Windows does not reliably forward UDP ports from the host to containers. This project uses GELF over TCP (port 12201) instead. Do not change the log generator back to UDP — all messages will be silently discarded.
 
-**Simulated infrastructure:**
-The Python log generator replaces real game server infrastructure. In production, rsyslog agents on each of the 300 game servers would replace the generator. The log formats and field structures are identical — only the source changes.
+**Simulated infrastructure:** The log generator replaces real game server infrastructure. In production, rsyslog agents on each server would replace the generator.
 
-**Single node deployment:**
-This deployment runs on a single machine with no high availability or failover. The brief mentions 99.9% uptime as a requirement — achieving this in production would require a multi-node OpenSearch cluster and Graylog cluster configuration beyond the scope of this prototype.
+**Single-node deployment:** No high availability. A production deployment would require a multi-node OpenSearch cluster and Graylog cluster.
 
-**Data retention:**
-No explicit retention policy has been configured. In production, a 30-day hot storage policy would be implemented as specified in the brief.
+**ML model is pre-trained:** The severity model was trained on synthetic Catnip Games log data. It will still work on real infrastructure but may need retraining on live data for optimal accuracy.
 
-**Alert fatigue:**
-The current alerting is threshold-based only — it fires whenever a count exceeds a fixed number regardless of whether that count is unusual for that specific IP or user. A behavioural baseline engine that profiles normal activity per entity and scores alerts against that baseline would significantly reduce false positives. This is documented as a future enhancement.
+**Claude API key optional:** Without `ANTHROPIC_API_KEY`, OmniLog's chat uses simple keyword-to-query translation. The zero-day alerts, dashboard counts, and print report all work without it.
 
-**Secret distribution:**
-The current workflow shares `.env` privately between team members via WhatsApp. This is appropriate for an academic prototype but would not scale to a production environment. Hardening paths include using a secrets manager (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), CI/CD secret injection, or encrypting `.env` in the repository with `sops` or `git-crypt`. All three are documented as future work.
+---
+
+## Project Team
+
+| Name | Contribution |
+|---|---|
+| Adebowale (Team Lead) | Docker infrastructure, log generator, report script, bootstrap scripts, architecture |
+| Stephen | Graylog platform deployment and maintenance |
+| Lekan | Inputs, extractors, rsyslog configuration, streams |
+| Faith | Alert event definitions, notifications, remediation procedures |
+| Akhamas | 5 dashboards, 20 widgets, visualisation design |
+| Chamberlain | OmniLog AI frontend + API, ML service integration, zero-day detection, CVE mapping, print report, branding, debugging |
 
 ---
 
@@ -655,7 +701,6 @@ The current workflow shares `.env` privately between team members via WhatsApp. 
 
 Built for the **Cyber Security Automation** module at the University of Roehampton.
 
-- **Scenario:** Catnip Games International SIEM implementation
 - **Work Role:** DCWF 511 — Cyber Defense Analyst
 - **Competency:** Uses data collected from cyber defense tools to analyse events for the purposes of mitigating threats
 - **Assessment:** In-lab team demonstration with individual Q&A

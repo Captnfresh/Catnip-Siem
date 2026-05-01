@@ -56,18 +56,20 @@ SSH_SOURCES = [f"game-server-{i:02d}" for i in range(1, 11)] + \
               [f"dev-server-{i:02d}" for i in range(1, 4)]
 
 # ─────────────────────────────────────────
-# GELF sender
+# GELF sender — TCP with null-byte delimiter (Docker Desktop drops UDP 12201 on Windows)
 # ─────────────────────────────────────────
 def send_gelf(message: dict):
     message.setdefault("version", "1.1")
     message.setdefault("host",    "catnip-simulator")
-    payload    = json.dumps(message).encode("utf-8")
-    compressed = zlib.compress(payload)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    payload = json.dumps(message).encode("utf-8") + b"\x00"  # GELF TCP delimiter
     try:
-        sock.sendto(compressed, (GRAYLOG_HOST, GRAYLOG_PORT))
-    finally:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        sock.connect((GRAYLOG_HOST, GRAYLOG_PORT))
+        sock.sendall(payload)
         sock.close()
+    except OSError:
+        pass  # Graylog temporarily unavailable — skip this event
 
 # ─────────────────────────────────────────
 # Event generators
